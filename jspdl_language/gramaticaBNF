@@ -1,0 +1,50 @@
+Program -> Block Program
+Program -> FunctionDeclaration Program
+Program -> eof # this means that theres no more file
+Block -> let Type id ;
+Block -> if ( Expression ) Statement
+Block -> Statement
+Block -> do { ContinuousBlocks } while ( Expression );
+Type -> int
+Type -> boolean
+Type -> string
+Statement -> id Statement_Prime ; 
+Statement -> return ReturnValue ;
+Statement -> print ( Expression ) ;
+Statement -> input ( id ) ;
+Statement_Prime -> = Expression 
+Statement_Prime -> ( ArgumentList ) 
+Statement_Prime -> ++
+ReturnValue -> Expression
+ReturnValue -> lambda
+ContinuousBlocks -> Block ContinuousBlocks
+ContinuousBlocks -> lambda
+ArgumentList -> Expression RestOfArgumentList
+ArgumentList -> lambda
+RestOfArgumentList -> , Expression RestOfArgumentList
+RestOfArgumentList -> lambda
+FunctionDeclaration -> function id TypeOrVoid ( AgumentDeclarationList ) { ContinuousBlocks } 
+TypeOrVoid -> Type
+TypeOrVoid -> lambda
+AgumentDeclarationList -> Type id RestOfArgumentDeclarationList
+AgumentDeclarationList -> lambda
+RestOfArgumentDeclarationList -> , Type id RestOfArgumentDeclarationList
+RestOfArgumentDeclarationList -> lambda
+Expression -> LogicalRelationalExpression LogicalExpression  
+LogicalRelationalExpression -> ArithmeticExpression RelationalExpression  
+ArithmeticExpression -> ExpressionValue ArithmeticSubExpression  
+LogicalExpression -> || LogicalRelationalExpression LogicalExpression
+LogicalExpression -> lambda 
+RelationalExpression -> == LogicalRelationalExpression RelationalExpression
+RelationalExpression -> lambda
+ArithmeticSub -> + ExpressionValue ArithmeticSub
+ArithmeticSub -> lambda
+ExpressionValue -> id ExpressionValu_Prime'
+ExpressionValue -> ( Expression )
+ExpressionValue ->  literal_number # negative or positive
+ExpressionValue -> literal_string # in the form of "string"
+ExpressionValue -> true # true value
+ExpressionValue -> false # false value
+ExpressionValue_Prime -> ( ArgumentList ) 
+ExpressionValue_Prime -> ++ 
+ExpressionValue_Prime -> lambda

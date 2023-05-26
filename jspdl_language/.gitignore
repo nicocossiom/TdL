@@ -1,0 +1,6 @@
+Cargo.toml
+src
+node_modules
+build
+bindings
+tree-sitter-macos*

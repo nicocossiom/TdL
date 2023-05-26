@@ -1,0 +1,25 @@
+
+---------------------------------------------------------------------------
+			TABLA PRINCIPAL #0
+
+*  LEXEMA : "someFunction"
+   ATRIBUTOS : 
+		+ Tipo: funcion
+		+numParam: 2
+			+ TipoParam0: int
+			+ TipoParam1: int
+			+TipoRetorno: 
+---------------------------------------------------------------------------
+---------------------------------------------------------------------------
+			TABLA de funcion "someFunction" #1
+
+*  LEXEMA : "id2"
+   ATRIBUTOS : 
+		+ Tipo: int
+		+ Despl: 0
+
+*  LEXEMA : "id"
+   ATRIBUTOS : 
+		+ Tipo: int
+		+ Despl: 1
+---------------------------------------------------------------------------

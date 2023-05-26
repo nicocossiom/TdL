@@ -1,0 +1,20 @@
+{
+  "name": "jspdl-parser",
+  "version": "1.0.0",
+  "description": "",
+  "main": "grammar.js",
+  "dependencies": {
+    "nan": "^2.17.0",
+    "node-gyp": "^9.3.1"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "install": "node-gyp rebuild"
+  },
+  "author": "Nico Cossio",
+  "license": "ISC",
+  "gypfile": true,
+  "devDependencies": {
+    "tree-sitter-cli": "^0.20.8"
+  }
+}

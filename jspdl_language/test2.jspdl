@@ -1,0 +1,21 @@
+function someFunction (int id, int id2) {
+  do {
+    if (id == id2)
+      print(id);
+  } while (id == id);
+  return id;
+}
+
+let int a; 
+a = 5; 
+let int b; 
+b = a; 
+if (a == b)
+  print("a y b son iguales");
+
+let boolean a1; a1 = true;
+let boolean b1; b1 = false; 
+do{
+  a++; 
+  print(a + 5);
+}while( a1 || b1 );

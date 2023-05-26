@@ -1,0 +1,23 @@
+/* Asignaciones */
+let int a; 
+a = 5 ; 
+print(5);
+let string b; 
+input(b); 
+do { /* do while */
+    a++; /* post increm */
+} while (a == b);
+return x; 
+return; 
+max(a, b, c, d);
+
+function myFunc int (string arg1, int arg2) {
+    if (a || b)
+        return; 
+};
+
+let boolean z; 
+z = true;
+
+
+
