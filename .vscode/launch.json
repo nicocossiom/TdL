@@ -21,6 +21,10 @@
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
+            "args": [
+                "jspdl_language/test.jspdl",
+                "--ast"
+            ],
             "justMyCode": true
         }
     ]
