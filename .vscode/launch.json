@@ -11,7 +11,7 @@
             "program": "${workspaceFolder}/src/jspdl.py",
             "console": "integratedTerminal",
             "args": [
-                "src/test.jspdl"
+                "src/test2.jspdl"
             ],
             "justMyCode": true
         },
@@ -19,11 +19,11 @@
             "name": "main",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/main.py",
+            "program": "${workspaceFolder}/src/main.py",
             "console": "integratedTerminal",
             "args": [
-                "jspdl_language/test.jspdl",
-                "--ast"
+                "jspdl_language/test2.jspdl",
+                // "--ast"
             ],
             "justMyCode": true
         }

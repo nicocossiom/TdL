@@ -1,5 +1,2 @@
-let string somestring
-
-do{
-    input( a + b);
-}while(a++);
+let string d;
+a = 10; 
