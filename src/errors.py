@@ -6,6 +6,7 @@ from colorama import Fore
 from tree_sitter import Node, Tree
 
 from ast_util import unwrap_text
+from symbol_table import JSPDLType
 
 
 class Error:
@@ -19,19 +20,19 @@ class Error:
 class SyntaxError(Error):
     def __init__(self, node, message=None):
         super().__init__(node)
-        if message:
-            self.message = message
 
     def __repr__(self):
-        return f"{super().__repr__()}: {self.message if self.message else self.node.sexp()[1:-1]}"
+        return f"{super().__repr__()}: {self.node.sexp()[1:-1]}"
 
 
-class UndeclaredError(Error):
+class UndeclaredVariableError(Error):
     def __init__(self, node: Node):
         super().__init__(node)
+        self.identifier = self.node.child_by_field_name("identifier")
 
     def __repr__(self):
-        return f"{super().__repr__()}: {unwrap_text(self.node.text)} is not declared in any scope"
+        assert self.identifier is not None
+        return f"{super().__repr__()}: variable '{unwrap_text(self.identifier.text)}' is not declared in any scope"
 
 
 class PreDeclarationError(Error):
@@ -40,6 +41,27 @@ class PreDeclarationError(Error):
 
     def __repr__(self):
         return f"{super().__repr__()}: {unwrap_text(self.node.text)} is already declared in the current scope"
+
+
+class TypeMismatchError(Error):
+
+    def __init__(self, node: Node, expected_type: JSPDLType, actual_type: JSPDLType):
+        super().__init__(node)
+        self.expected_type = expected_type
+        self.actual_type = actual_type
+
+    def __repr__(self):
+        return f"{super().__repr__()}: expected type {self.expected_type} but got {self.actual_type}"
+
+
+class NonInitializedError(Error):
+    def __init__(self, node: Node):
+        super().__init__(node)
+        identifier_text = self.node.text
+        self.identifier = unwrap_text(identifier_text)
+
+    def __repr__(self):
+        return super().__repr__() + f": variable '{self.identifier}' has not yet been initialized"
 
 
 def check_parsing_errors(tree: Tree):
@@ -115,6 +137,8 @@ def print_error_line(er_line: int, padding: str, column_start: int, column_end: 
     import globals
     file_lines = globals.file_lines
     assert file_lines is not None
+    max_line_length = max(len(line) for line in file_lines)
+    print(f"{padding}{'-'*max_line_length}")
     print(f"{padding}{er_line}{padding}{file_lines[er_line-1]}")
     padding_with_line_number = " " * (len(f"{er_line}") + column_start-1)
     cursor_size = max(1, column_end - column_start)
@@ -184,7 +208,9 @@ def print_file_with_errors(er_line: int, padding: str, column_start: int, column
     node_with_error : Node
         The node containing the error message.
     """
-    from main import file_lines
+    import globals
+    file_lines = globals.file_lines
+    assert file_lines is not None
     padding_factor = len(f"{len(file_lines)}")
     for i, line in enumerate(file_lines):
         i += 1

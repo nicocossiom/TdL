@@ -1,4 +1,4 @@
-import json
+
 import os
 import sys
 from typing import Generator, Tuple
@@ -9,7 +9,7 @@ from tree_sitter import Node, Parser, Tree
 import globals
 from ast_util import json_tree_print, print_tree_named
 from language import parser
-from type_checker import ast_type_checker
+from type_checker import ast_type_check_tree
 
 init(autoreset=True)  # colorama init
 
@@ -58,7 +58,7 @@ def parse_arguments_and_get_raw_code() -> str:
     with open(globals.file, 'r') as f:
 
         globals.file_path = os.path.abspath(globals.file)
-        globals.file_name = os.path.basename(globals.file_path)
+        globals.file_name = os.path.basename(globals.file_path).__str__()
         file_lines_raw = f.readlines()
         globals.file_lines = [line.replace("\n", "")
                               for line in file_lines_raw]
@@ -90,7 +90,7 @@ def main() -> None:
     code = parse_arguments_and_get_raw_code()
     tree = parser.parse(bytes(code, 'utf8'))
     execute_options(tree, code)
-    ast_type_checker(tree)
+    ast_type_check_tree(tree)
 
 
 if __name__ == "__main__":

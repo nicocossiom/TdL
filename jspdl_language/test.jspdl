@@ -1,22 +1,11 @@
-let int a; 
-a = 5 ; 
-print(5);
-let string b; 
-input(b); 
-do { /* do while */
-    a++; /* post increm */
-} while (a == b);
-return x; 
-return; 
-max(a, b, c, d);
-
-function myFunc int (string arg1, int arg2) {
-    if (a || b)
-        return; 
-};
-
-let boolean z; 
-z = true;
-
+let int a;
+let int b;
+let int c;
+let int d;
+a = 1;
+b = 1;
+c = 1;
+d = 1;
+a = a + b + d == c || b == c + 1 || true;
 
 

@@ -26,18 +26,18 @@ module.exports = grammar({
 
 		),
 		let_statement: $ => seq('let', field("type", $.type), field("identifier", $.identifier), ';'),
-		if_statement: $ => seq('if', '(', field("if_condition", $.expression), ')', field("if_body", $._statement)),
+		if_statement: $ => seq('if', '(', field("if_condition", $._expression), ')', field("if_body", $._statement)),
 		do_while_statement: $ =>
 			seq('do', '{', repeat($._statement), '}',
-				'while', '(', field("do_while_condition", $.expression), ')', ';'),
-		return_statement: $ => seq('return', field("return_value", optional($.expression)), ';'),
-		print_statement: $ => seq('print', '(', $.expression, ')', ';'),
+				'while', '(', field("do_while_condition", $._expression), ')', ';'),
+		return_statement: $ => seq('return', field("return_value", optional($._expression)), ';'),
+		print_statement: $ => seq('print', '(', $._expression, ')', ';'),
 		input_statement: $ => seq('input', '(', $.identifier, ')', ';'),
 		function_call: $ => seq($.identifier, '(', optional($.argument_list), ')', ';'),
-		assignment_statement: $ => seq($.identifier, '=', $.expression, ';'),
+		assignment_statement: $ => seq(field("identifier", $.identifier), '=', $._expression, ';'),
 		post_increment_statement: $ => seq($.identifier, '++'),
 
-		argument_list: $ => seq($.expression, repeat(seq(',', $.expression))),
+		argument_list: $ => seq($._expression, repeat(seq(',', $._expression))),
 
 		function_declaration: $ => seq(
 			'function',
@@ -58,20 +58,21 @@ module.exports = grammar({
 
 		parenthesized_expression: $ => seq(
 			'(',
-			$.expression,
+			$._expression,
 			')'
 		),
 
-		expression: $ => choice(
+		_expression: $ => choice(
 			$.value,
 			$.or_expression,
 			$.equality_expression,
 			$.addition_expression
 		),
 
-		or_expression: $ => prec.left(1, seq(field('left', $.expression), '||', field('right', $.expression))),    // Logical
-		equality_expression: $ => prec.left(2, seq(field('left', $.expression), '==', field('right', $.expression))),    // Equality
-		addition_expression: $ => prec.left(3, seq(field('left', $.expression), '+', field('right', $.expression))),     // Addition
+
+		or_expression: $ => prec.left(1, seq($._expression, '||', $._expression)),    // Logical
+		equality_expression: $ => prec.left(2, seq($._expression, '==', $._expression)),    // Equality
+		addition_expression: $ => prec.left(3, seq($._expression, '+', $._expression)),     // Addition
 
 		value: $ => choice(
 			$._expression_value,

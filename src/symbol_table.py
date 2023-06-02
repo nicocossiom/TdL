@@ -5,10 +5,18 @@ from tree_sitter import Node
 
 
 class JSPDLType(Enum):
+    FUNCTION = "function"
     UNBOUND = "unbound"
+    INVALID = "invalid"
     INT = "int"
     BOOLEAN = "boolean"
     STRING = "string"
+
+    def __repr__(self) -> str:
+        return self.value
+
+    def __str__(self) -> str:
+        return self.value
 
 
 size_dict: Dict[JSPDLType, int] = {
@@ -24,13 +32,17 @@ size_dict = {
 }
 
 
-class VarEntry:
+class Entry:
+    def __init__(self, type: JSPDLType, node: Node) -> None:
+        self.type = type
+        self.node = node
+
+
+class VarEntry(Entry):
     def __init__(self, type: str, value: Optional[Union[str, bool, int]], offset: Optional[int], node: Node):
-        self.type: JSPDLType = JSPDLType(type)
+        super().__init__(JSPDLType(type), node)
         self.value = value
         self.offset = offset
-        self.size = size_dict[self.type]
-        self.node = None
 
 
 class Argument(NamedTuple):
@@ -38,14 +50,15 @@ class Argument(NamedTuple):
     id: str
 
 
-class FnEntry(TypedDict):
-    return_type: str
-    arguments: Optional[List[Argument]]
-    node: Node
+class FnEntry(Entry):
+    def __init__(self, return_type: JSPDLType, arguments, node) -> None:
+        super().__init__(JSPDLType.FUNCTION, node)
+        self.return_type = return_type
+        self.arguments: Optional[List[Argument]] = arguments
 
 
 # Define the type for the symbol table
-SymbolTable = Dict[str, Union[VarEntry, FnEntry]]
+SymbolTable = Dict[str, FnEntry | VarEntry]
 
 # Initialize an empty symbol table
 symbol_table: SymbolTable = {}
