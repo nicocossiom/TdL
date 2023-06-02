@@ -1,2 +1,6 @@
-let boolean a;
-a = true || 2 == 2 || 1 + 1 +1 == 2 ;
+function prueba boolean(int a, int b){
+    let string b;
+    input(b);
+    print(b);
+    print(a + b);
+}

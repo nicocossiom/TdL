@@ -6,7 +6,7 @@ from colorama import Fore
 from tree_sitter import Node, Tree
 
 from ast_util import unwrap_text
-from symbol_table import JSPDLType
+from symbol_table import Argument, JSPDLType
 
 
 class Error:
@@ -33,6 +33,44 @@ class UndeclaredVariableError(Error):
     def __repr__(self):
         assert self.identifier is not None
         return f"{super().__repr__()}: variable '{unwrap_text(self.identifier.text)}' is not declared in any scope"
+
+
+class UndeclaredFunctionCallError(Error):
+    def __init__(self, identifier_node: Node):
+        super().__init__(identifier_node)
+
+    def __repr__(self):
+        return f"{super().__repr__()}: function '{unwrap_text(self.node.text)}' being called but is not declared in any scope"
+
+
+class ReturnTypeMismatchError(Error):
+    from symbol_table import FnEntry
+
+    def __init__(self, node: Node, fn: FnEntry, actual_type: JSPDLType):
+        super().__init__(node)
+        self.fn = fn
+        self.actual_type = actual_type
+
+    def __repr__(self):
+        return f"{super().__repr__()}: expected return type for {self.fn.function_name} {self.fn.return_type} but got {self.actual_type}"
+
+
+class CallWithInvalidArgumentsError(Error):
+    def __init__(self, identifier_node: Node, expected_types: list[JSPDLType] = [], actual_types: list[JSPDLType] = []):
+        super().__init__(identifier_node)
+        self.expected_types = expected_types
+        self.actual_types = actual_types
+
+    def __repr__(self):
+        return f"{super().__repr__()}: call to '{unwrap_text(self.node.text)}' with invalid arguments: expected {self.expected_types} but got {self.actual_types}"
+
+
+class InvalidReturnInScopeError(Error):
+    def __init__(self, node: Node):
+        super().__init__(node)
+
+    def __repr__(self):
+        return f"{super().__repr__()}: current scope is not a function declaration"
 
 
 class PreDeclarationError(Error):

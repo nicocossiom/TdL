@@ -3,6 +3,8 @@ from typing import Dict, List, NamedTuple, Optional, TypedDict, Union
 
 from tree_sitter import Node
 
+from ast_util import unwrap_text
+
 
 class JSPDLType(Enum):
     FUNCTION = "function"
@@ -11,6 +13,7 @@ class JSPDLType(Enum):
     INT = "int"
     BOOLEAN = "boolean"
     STRING = "string"
+    VOID = "void"
 
     def __repr__(self) -> str:
         return self.value
@@ -20,12 +23,6 @@ class JSPDLType(Enum):
 
 
 size_dict: Dict[JSPDLType, int] = {
-    JSPDLType.INT: 4,
-    JSPDLType.BOOLEAN: 1,
-    JSPDLType.STRING: 1,
-}
-
-size_dict = {
     JSPDLType.INT: 4,
     JSPDLType.BOOLEAN: 1,
     JSPDLType.STRING: 1,
@@ -46,15 +43,16 @@ class VarEntry(Entry):
 
 
 class Argument(NamedTuple):
-    type: str
+    type: JSPDLType
     id: str
 
 
 class FnEntry(Entry):
-    def __init__(self, return_type: JSPDLType, arguments, node) -> None:
+    def __init__(self, return_type: JSPDLType, arguments: List[Argument], node: Node) -> None:
         super().__init__(JSPDLType.FUNCTION, node)
         self.return_type = return_type
-        self.arguments: Optional[List[Argument]] = arguments
+        self.arguments: List[Argument] = arguments
+        self.function_name = unwrap_text(node.named_children[0].text)
 
 
 # Define the type for the symbol table
