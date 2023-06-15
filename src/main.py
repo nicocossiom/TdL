@@ -1,13 +1,14 @@
 
 import os
 import sys
-from typing import Generator, Tuple
 
-from colorama import Fore, init
-from tree_sitter import Node, Parser, Tree
+from colorama import init
+from tree_sitter import Tree
 
 import globals
 from ast_util import json_tree_print, print_tree_named
+from code_gen import gen_code
+from errors import check_parsing_errors
 from language import parser
 from type_checker import ast_type_check_tree
 
@@ -37,7 +38,6 @@ def parse_arguments_and_get_raw_code() -> str:
     ------
     SystemExit
         If the command line arguments are invalid or the file does not exist.
-
     """
 
     if len(sys.argv) < 2:
@@ -90,7 +90,9 @@ def main() -> None:
     code = parse_arguments_and_get_raw_code()
     tree = parser.parse(bytes(code, 'utf8'))
     execute_options(tree, code)
+    check_parsing_errors(tree)
     ast_type_check_tree(tree)
+    gen_code()
 
 
 if __name__ == "__main__":

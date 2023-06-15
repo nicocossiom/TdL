@@ -1,12 +1,11 @@
 import sys
-from enum import Enum
 from typing import Generator
 
 from colorama import Fore
 from tree_sitter import Node, Tree
 
 from ast_util import unwrap_text
-from symbol_table import Argument, JSPDLType
+from symbol_table import JSPDLType
 
 
 class Error:
@@ -17,9 +16,16 @@ class Error:
         return f"{Fore.RED}{self.__class__.__name__}{Fore.RESET}"
 
 
-class SyntaxError(Error):
-    def __init__(self, node, message=None):
+class InvalidArgumentError(Error):
+    def __init__(self, node: Node):
         super().__init__(node)
+
+
+class SyntaxError(Error):
+    def __init__(self, node: Node, message: str = ""):
+        super().__init__(node)
+        if message == "":
+            self.message = f"{self.node.sexp()[1:-1]}"
 
     def __repr__(self):
         return f"{super().__repr__()}: {self.node.sexp()[1:-1]}"

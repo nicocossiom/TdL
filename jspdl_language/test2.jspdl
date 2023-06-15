@@ -1,6 +1,10 @@
-function prueba boolean(int a, int b){
-    let string b;
-    input(b);
-    print(b);
-    print(a + b);
+let int a; 
+a=1; 
+function nada(){
+let int b;
+b = 5;
+let int a;
+a = 5; 
 }
+let int c; 
+c = 2;

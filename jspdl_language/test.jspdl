@@ -1,11 +1,11 @@
 let int a;
 let int b;
 let int c;
-let int d;
+let boolean d;
 a = 1;
 b = 1;
 c = 1;
 d = 1;
-a = a + b + d == c || b == c + 1 || true;
+a = a + b + c + d; 
 
 

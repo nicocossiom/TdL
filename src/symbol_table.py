@@ -1,9 +1,10 @@
 from enum import Enum
-from typing import Dict, List, NamedTuple, Optional, TypedDict, Union
+from typing import Dict, List, NamedTuple, Optional, Union
 
 from tree_sitter import Node
 
 from ast_util import unwrap_text
+from code_gen import OperandScope
 
 
 class JSPDLType(Enum):
@@ -23,10 +24,22 @@ class JSPDLType(Enum):
 
 
 size_dict: Dict[JSPDLType, int] = {
-    JSPDLType.INT: 4,
+    JSPDLType.INT: 1,
     JSPDLType.BOOLEAN: 1,
-    JSPDLType.STRING: 1,
+    JSPDLType.STRING: 64,
 }
+
+
+def get_sope(identifier: str) -> OperandScope:
+    if identifier in current_symbol_table:
+        # it's possible identifier is in both STs, in that case we want the local one to take precedence
+        # it's in both STs and we're in the global one
+        if identifier in global_symbol_table and global_symbol_table == current_symbol_table:
+            return OperandScope.GLOBAL
+        else:
+            return OperandScope.LOCAL
+    raise Exception(
+        "Identifier not found in any symbol table, should not happen")
 
 
 class Entry:
@@ -36,7 +49,7 @@ class Entry:
 
 
 class VarEntry(Entry):
-    def __init__(self, type: str, value: Optional[Union[str, bool, int]], offset: Optional[int], node: Node):
+    def __init__(self, type: str, value: Optional[Union[str, bool, int]], offset: int, node: Node):
         super().__init__(JSPDLType(type), node)
         self.value = value
         self.offset = offset
@@ -59,5 +72,5 @@ class FnEntry(Entry):
 SymbolTable = Dict[str, FnEntry | VarEntry]
 
 # Initialize an empty symbol table
-symbol_table: SymbolTable = {}
-current_symbol_table: SymbolTable = symbol_table
+global_symbol_table: SymbolTable = {}
+current_symbol_table: SymbolTable = global_symbol_table

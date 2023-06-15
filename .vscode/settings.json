@@ -2,10 +2,7 @@
     "[python]": {
         "editor.defaultFormatter": "ms-python.autopep8"
     },
-    "python.formatting.provider": "none",
-    "python.analysis.typeCheckingMode": "basic",
-    "docwriter.progress.trackTypes": true,
-    "docwriter.progress.trackMethods": true,
-    "docwriter.progress.trackClasses": true,
-    "docwriter.progress.trackFunctions": false
+    "python.formatting.provider": "autopep8",
+    "python.analysis.typeCheckingMode": "strict",
+    "python.linting.mypyEnabled": true,
 }

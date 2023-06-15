@@ -1,6 +1,5 @@
 import json
-from ast import Tuple
-from typing import Dict, Generator, List, TypeVar, Union
+from typing import Dict, List, Union
 
 from tree_sitter import Node, Tree
 
@@ -40,7 +39,7 @@ def print_tree_named(tree: Tree):
     tree : Tree
         The tree to print.
     """
-    branches = set()
+    branches: set[int] = set()
     for node, depth in traverse_tree_named(tree):
         prefix = ''.join(
             '│   ' if i in branches else '    ' for i in range(depth))

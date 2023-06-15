@@ -1,13 +1,12 @@
-from io import TextIOWrapper
-from typing import List, LiteralString, Optional
+from typing import List
 
-# file being analyzed (relative path)
-file: Optional[TextIOWrapper] = None
+# file being analyzed (given as argument)
+file: str = ""
 # file being analyzed (full path)
-file_path = None
+file_path = ""
 # file lines (list of strings)
-file_lines: Optional[List[str]] = None
-# base name of file
-file_name: Optional[str] = None
+file_lines: List[str] = []
+# base name of file being analyzed (no path)
+file_name: str = ""
 # code being analyzed (string)
-code = None
+code: str = ""
