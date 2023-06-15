@@ -4,6 +4,8 @@ from typing import Callable, Optional
 static_memory_size = 0
 static_memory_current_offset = 0
 
+temporal_counter = 0
+
 
 class Operation(Enum):
     ADD = 1
@@ -137,7 +139,7 @@ def gen_add(q: Quartet) -> str:
     if not q.op1 or not q.op2 or not q.res:
         raise CodeGenException(
             "Addition operation must have at least two operands and a result")
-        
+
     return gen_instr(f"ADD {find_op(q.op1)}, {find_op(q.op2)} ; ADD op1, op2")
 
 

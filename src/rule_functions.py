@@ -219,6 +219,10 @@ def equality_expression(node: Node) -> TypeCheckResult:
         return TypeCheckResult(JSPDLType.INVALID)
 
 
+def id_if_not_literal_value(x: TypeCheckResult):
+    return x.value if not x.identifier else x.identifier
+
+
 def addition_expression(node: Node) -> TypeCheckResult:
     base_query = language.query(
         "(addition_expression ( value ) @left ( value ) @right)")
@@ -232,6 +236,9 @@ def addition_expression(node: Node) -> TypeCheckResult:
         if check_left_right_type_eq(left, right, node_left, node_right, JSPDLType.INT):
             assert isinstance(left.value, int)
             assert isinstance(right.value, int)
+            cg.c3d_queue.append("t" + str(cg.temporal_counter) +
+                                " := " + str(left.value) + " + " + str(right.value))
+            cg.temporal_counter += 1
             cg.quartet_queue.append(
                 Quartet(
                     Operation.ADD,
@@ -241,7 +248,7 @@ def addition_expression(node: Node) -> TypeCheckResult:
                     Operand(value=".A", scope=cg.OperandScope.TEMPORAL)
                 )
             )
-            return TypeCheckResult(JSPDLType.INT)
+            return TypeCheckResult(JSPDLType.INT, value=f"t{+ cg.temporal_counter - 1}")
         else:
             return TypeCheckResult(JSPDLType.INVALID)
 
@@ -250,8 +257,9 @@ def addition_expression(node: Node) -> TypeCheckResult:
     left = addition_expression(node_left)
     right = value(node_right)
     if check_left_right_type_eq(left, right, node_left, node_right, JSPDLType.INT):
-        # assert isinstance(left.value, int)
-        # assert isinstance(right.value, int)
+        cg.c3d_queue.append(
+            f"t{cg.temporal_counter} := {id_if_not_literal_value(left)} + {id_if_not_literal_value(right)}")
+        cg.temporal_counter += 1
         cg.quartet_queue.append(
             Quartet(
                 Operation.ADD,
@@ -260,7 +268,7 @@ def addition_expression(node: Node) -> TypeCheckResult:
                 Operand(scope=cg.OperandScope.TEMPORAL)
             )
         )
-        return TypeCheckResult(JSPDLType.INT, scope=cg.OperandScope.TEMPORAL)
+        return TypeCheckResult(JSPDLType.INT, value=f"t{+ cg.temporal_counter - 1}", scope=cg.OperandScope.TEMPORAL)
     else:
         return TypeCheckResult(JSPDLType.INVALID)
 
