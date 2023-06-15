@@ -54,4 +54,8 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
-
+errores.tmp
+fuente.tmp
+memoria.tmp
+out.3ic
+out.ens

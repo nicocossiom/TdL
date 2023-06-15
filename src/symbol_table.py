@@ -30,7 +30,7 @@ size_dict: Dict[JSPDLType, int] = {
 }
 
 
-def get_sope(identifier: str) -> OperandScope:
+def get_scope(identifier: str) -> OperandScope:
     if identifier in current_symbol_table:
         # it's possible identifier is in both STs, in that case we want the local one to take precedence
         # it's in both STs and we're in the global one
@@ -68,9 +68,31 @@ class FnEntry(Entry):
         self.function_name = unwrap_text(node.named_children[0].text)
 
 
+class SymbolTable:
+    def __init__(self) -> None:
+        self.entries: Dict[str, Entry] = {}
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.entries
+
+    def __getitem__(self, key: str) -> Entry:
+        return self.entries[key]
+
+    def __setitem__(self, key: str, value: Entry) -> None:
+        current_offset = self.entries.__len__()
+        if isinstance(value, VarEntry):
+            value.offset += current_offset
+        self.entries[key] = value
+
+    def __repr__(self) -> str:
+        return str(self.entries)
+
+    def __str__(self) -> str:
+        return str(self.entries)
+
+
 # Define the type for the symbol table
-SymbolTable = Dict[str, FnEntry | VarEntry]
 
 # Initialize an empty symbol table
-global_symbol_table: SymbolTable = {}
+global_symbol_table: SymbolTable = SymbolTable()
 current_symbol_table: SymbolTable = global_symbol_table

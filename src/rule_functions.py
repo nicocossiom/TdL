@@ -1,29 +1,40 @@
-from typing import Any, Callable, List, Optional
+import inspect
+from typing import Any, List, Optional
 
 from tree_sitter import Node
 
+import code_gen as cg
 import symbol_table as st
 from ast_util import unwrap_text
-from code_gen import Operand, Operation, Quartet, quartet_queue
+from code_gen import Operand, Operation, Quartet
 from errors import (CallWithInvalidArgumentsError, InvalidArgumentError,
                     InvalidReturnInScopeError, NonInitializedError,
                     PreDeclarationError, ReturnTypeMismatchError,
                     TypeMismatchError, UndeclaredFunctionCallError,
                     UndeclaredVariableError, print_error)
 from language import language
-from symbol_table import (Argument, FnEntry, JSPDLType, VarEntry, get_sope,
-                          size_dict)
+from symbol_table import (Argument, FnEntry, JSPDLType, SymbolTable, VarEntry,
+                          get_scope, size_dict)
 
 current_fn: Optional[FnEntry] = None
 
 
 class TypeCheckResult():
-    def __init__(self, type: JSPDLType, value: str | int | bool | None = None):
+    def __init__(self, type: JSPDLType, value: str | int | bool | None = None, identifier: str | None = None, offset: int | None = None):
         self.type = type
         self.value = value
+        self.identifier = identifier
+        self.offset = offset
+        self.scope = get_scope(identifier) if identifier is not None else None
 
     def __repr__(self) -> str:
-        return f"type: {self.type}, value: {self.value}"
+        rep = "("
+        for i, key in enumerate(self.__dict__, 0):
+            if self.__dict__[key] is not None:
+                rep += f"{key}: self.__dict__[val]" + \
+                    ", " if i < len(self.__dict__) else ""
+        rep += ")"
+        return rep
 
 
 def check_left_right_type_eq(
@@ -56,6 +67,7 @@ def let_statement(node: Node):
         offset = size_dict[JSPDLType(let_type)]
         st.current_symbol_table[let_identifier] = VarEntry(
             type=let_type, value=None, offset=offset, node=node)
+        cg.static_memory_size += offset
         return TypeCheckResult(JSPDLType.VOID)
     else:
         pred_node = st.current_symbol_table[let_identifier]
@@ -85,14 +97,18 @@ def assignment_statement(node: Node):
             var.type), expression_checked, var.node, expression, var.type):
         return TypeCheckResult(JSPDLType.INVALID)
     # Assignment is correct
-    scope = get_sope(identifier)
+    scope = get_scope(identifier)
+    assert isinstance(var, VarEntry)
     var.value = expression_checked.value
     # TODO check if var.offset is the one
-    quartet_queue.append(Quartet(Operation.ASSIGN, Operand(var.offset, scope),
-                         res=expression_checked.value))
+    cg.c3d_queue.append(
+        f"{identifier} := {expression_checked.value if expression_checked.value else expression_checked.identifier}")
+    cg.quartet_queue.append(
+        Quartet(
+            Operation.ASSIGN,
+            op1=Operand(offset=var.offset, scope=scope),
+            res=Operand(value=expression_checked.value, offset=expression_checked.offset, scope=expression_checked.scope)))
     return TypeCheckResult(JSPDLType.VOID)
-    # quartet_queue.put(
-    # )
 
 
 def value_to_typed_value(node: Node) -> int | str | bool:
@@ -116,14 +132,18 @@ def post_increment_statement(node: Node) -> TypeCheckResult | Any:
     if isinstance(var, FnEntry):
         print_error(TypeMismatchError(node, JSPDLType.FUNCTION, var.type))
         return TypeCheckResult(JSPDLType.INVALID)
-
+    assert isinstance(var, VarEntry)
     if not var.value:
         print_error(NonInitializedError(node))
         return TypeCheckResult(var.type)
-
-    if not isinstance(var.value, int):
-        raise Exception(f"this {var} value should be an int")
-    var.value += 1
+    scope = get_scope(identifier)
+    cg.quartet_queue.append(
+        Quartet(Operation.ADD,
+                Operand(offset=var.offset, scope=scope),
+                Operand(value=1),
+                Operand(offset=var.offset, scope=scope)
+                )
+    )
     return TypeCheckResult(JSPDLType.INT, var.value)
 
 
@@ -136,6 +156,7 @@ def get_trs_from_ts_with_id(identifier: str, node: Node):
         print_error(TypeMismatchError(
             node, JSPDLType.FUNCTION, var.type))
         return TypeCheckResult(JSPDLType.INVALID)
+    assert isinstance(var, VarEntry)
     return TypeCheckResult(var.type, var.value)
 
 
@@ -145,13 +166,14 @@ def get_trs_from_ts_with_id_and_value(identifier: str, node: Node):
         print_error(TypeMismatchError(
             node, JSPDLType.FUNCTION, var.type))
         return TypeCheckResult(JSPDLType.INVALID)
+    assert isinstance(var, VarEntry)
     if var.value == None:
         print_error(NonInitializedError(node))
         return TypeCheckResult(JSPDLType.INVALID)
-    return TypeCheckResult(var.type, var.value)
+    return TypeCheckResult(type=var.type, identifier=identifier, offset=var.offset)
 
 
-def value(node: Node) -> TypeCheckResult | Any:
+def value(node: Node) -> TypeCheckResult:
     # $.post_increment_statement,
     # $.literal_string,
     # $.literal_number,
@@ -175,7 +197,7 @@ def value(node: Node) -> TypeCheckResult | Any:
             raise Exception(f"Unknown value type {node.type}")
 
 
-def or_expression(node: Node) -> TypeCheckResult | Any:
+def or_expression(node: Node) -> TypeCheckResult:
     node_left = node.named_children[0]
     node_right = node.named_children[1]
     left = rule_functions[node_left.type](node_left)
@@ -186,7 +208,7 @@ def or_expression(node: Node) -> TypeCheckResult | Any:
         return TypeCheckResult(JSPDLType.INVALID)
 
 
-def equality_expression(node: Node) -> TypeCheckResult | Any:
+def equality_expression(node: Node) -> TypeCheckResult:
     node_left = node.named_children[0]
     node_right = node.named_children[1]
     left = rule_functions[node_left.type](node_left)
@@ -197,7 +219,7 @@ def equality_expression(node: Node) -> TypeCheckResult | Any:
         return TypeCheckResult(JSPDLType.INVALID)
 
 
-def addition_expression(node: Node) -> TypeCheckResult | Any:
+def addition_expression(node: Node) -> TypeCheckResult:
     base_query = language.query(
         "(addition_expression ( value ) @left ( value ) @right)")
     captures = base_query.captures(node)
@@ -222,7 +244,7 @@ def addition_expression(node: Node) -> TypeCheckResult | Any:
         return TypeCheckResult(JSPDLType.INVALID)
 
 
-def input_statement(node: Node) -> TypeCheckResult | Any:
+def input_statement(node: Node) -> TypeCheckResult:
     identifier_node = node.named_children[0]
     identifier = unwrap_text(identifier_node.text)
 
@@ -255,7 +277,7 @@ def return_statement(node: Node) -> TypeCheckResult:
     return res
 
 
-def function_declaration(node: Node):
+def function_declaration(node: Node) -> TypeCheckResult:
     # TODO terminar y chequear
     query = language.query(
         """
@@ -281,7 +303,7 @@ def function_declaration(node: Node):
         capt_dict["argument_declaration_list"]) if "argument_declaration_list" in capt_dict else []
     if "block" not in capt_dict:
         raise Exception("Block not found in function declaration")
-    st.current_symbol_table = {}
+    st.current_symbol_table = SymbolTable()
     global current_fn
     current_fn = FnEntry(ret_type, args, node)
     block_check = rule_functions["block"](capt_dict["block"])
@@ -289,6 +311,7 @@ def function_declaration(node: Node):
         return TypeCheckResult(JSPDLType.INVALID)
     st.global_symbol_table[identifier] = FnEntry(ret_type, args, node)
     st.current_symbol_table = st.global_symbol_table
+    return TypeCheckResult(type=JSPDLType.VOID, identifier=identifier)
 
 
 def block(node: Node) -> TypeCheckResult:
@@ -322,7 +345,7 @@ def argument_declaration(node: Node) -> Argument:
     return Argument(JSPDLType(unwrap_text(capt_dict["type"].text)), unwrap_text(capt_dict["identifier"].text))
 
 
-def function_call(node: Node) -> TypeCheckResult | Any:
+def function_call(node: Node) -> TypeCheckResult:
     # TODO test
     query = language.query(
         "(function_call ( identifier ) @identifier ( argument_list) @argument_list)")
@@ -356,21 +379,28 @@ def argument_list(node: Node) -> List[JSPDLType] | None:
     return arg_list
 
 
-rule_functions: dict[str, Callable[[Node], Any]] = {
-    "let_statement": let_statement,
-    "assignment_statement": assignment_statement,
-    "value": value,
-    "or_expression": or_expression,
-    "equality_expression": equality_expression,
-    "addition_expression": addition_expression,
-    "post_increment_statement": post_increment_statement,
-    "input_statement": input_statement,
-    "print_statement": print_statement,
-    "return_statement": return_statement,
-    "function_call": function_call,
-    "argument_listt": argument_list,
-    "function_declaration": function_declaration,
-    "block": block,
-    "argument_declaration_list": argument_declaration_list,
-    "argument_declaration": argument_declaration,
-}
+# Get the current module
+current_module = inspect.getmodule(lambda: None)
+
+# Retrieve all functions in the current module
+rule_functions = {name: func for name, func in inspect.getmembers(
+    current_module, inspect.isfunction)}
+
+# rule_functions: dict[str, Callable[[Node], TypeCheckResult | list[Argument] | List[JSPDLType] | None]] = {
+#     "let_statement": let_statement,
+#     "assignment_statement": assignment_statement,
+#     "value": value,
+#     "or_expression": or_expression,
+#     "equality_expression": equality_expression,
+#     "addition_expression": addition_expression,
+#     "post_increment_statement": post_increment_statement,
+#     "input_statement": input_statement,
+#     "print_statement": print_statement,
+#     "return_statement": return_statement,
+#     "function_call": function_call,
+#     "argument_listt": argument_list,
+#     "function_declaration": function_declaration,
+#     "block": block,
+#     "argument_declaration_list": argument_declaration_list,
+#     "argument_declaration": argument_declaration,
+# }
