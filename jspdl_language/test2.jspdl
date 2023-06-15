@@ -1,9 +1,5 @@
-let boolean a; 
-a = true; 
-let boolean b; 
-b = false; 
-let boolean c; 
-c = false; 
+let int a; 
+a = 2 + 4 + 6; 
 let boolean d; 
-d = false; 
-a = a || b || c || d; 
+d = true || true; 
+d = a == 5;

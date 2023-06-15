@@ -101,10 +101,12 @@ class ActivationRegister:
 #             static_memory_end += 1
 
 
-
 def find_op(o: Operand) -> str:
     if o.scope == OperandScope.TEMPORAL:
-        return ".A"
+        assert isinstance(o.value, str)
+        if o.value.startswith("t"):
+            return ".A"
+        return o.value
     if o.value is None:
         assert o.offset is not None
         if o.scope == OperandScope.GLOBAL:
@@ -118,9 +120,6 @@ def find_op(o: Operand) -> str:
         return "#"+"1" if o.value else "0"
     # its a string
     return f"#{o.value}"
-
-
-
 
 
 def gen_code():
@@ -187,8 +186,12 @@ def gen_equals(q: Quartet) -> str:
         raise CodeGenException(
             "Addition operation must have at least two operands and a result")
     else:
-        return gen_instr(f"CMP {find_op(q.op1)}, {find_op(q.op2)} ; EQUALS op1, op2") and gen_instr(f"BZ {find_op(q.res)},{find_op(q.op1)} ; ASSIGN op1, res")
-    return ""
+        return \
+            gen_instr(f"CMP {find_op(q.op1)}, {find_op(q.op2)} ; CMP op1, op2") + \
+            gen_instr(f"BZ $5 ; true #1. (5 bc opcode1+op1.1+op1.2+opcode2+op2.1 ) ") + \
+            gen_instr(f"MOVE #0, {find_op(q.res)} ; equal ? false") + \
+            gen_instr(f"BR $3 ; skip next instr (3 bc opcode+op1+op2)") + \
+            gen_instr(f"MOVE #1, {find_op(q.res)} ; equal ? true")
 
 
 def gen_assign(q: Quartet) -> str:
@@ -197,7 +200,7 @@ def gen_assign(q: Quartet) -> str:
         raise CodeGenException(
             "Assign operation must have at least one operand and a result")
 
-    return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)} ; ASSIGN op1, res") 
+    return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)} ; ASSIGN op1, res")
 
 
 def gen_goto(q: Quartet) -> str:

@@ -231,7 +231,24 @@ def equality_expression(node: Node) -> TypeCheckResult:
     left = rule_functions[node_left.type](node_left)
     right = rule_functions[node_right.type](node_right)
     if check_left_right_type_eq(left, right, node_left, node_right, left.type):
-        return TypeCheckResult(JSPDLType.BOOLEAN)
+        cg.c3d_queue.append(
+            f"""if {id_if_not_literal_value(left)} == {id_if_not_literal_value(right)} goto true
+t{cg.temporal_counter} := 0
+goto next
+true: 
+t{cg.temporal_counter} := 1
+next:
+"""
+        )
+        cg.quartet_queue.append(
+            Quartet(Operation.EQUALS,
+                    Operand(left.value, left.offset, left.scope),
+                    Operand(right.value, right.offset, right.scope),
+                    res=Operand(value=".R2", scope=cg.OperandScope.TEMPORAL)
+                    )
+        )
+        cg.temporal_counter += 1
+        return TypeCheckResult(JSPDLType.BOOLEAN, value=f".R2", scope=cg.OperandScope.TEMPORAL)
     else:
         return TypeCheckResult(JSPDLType.INVALID)
 
