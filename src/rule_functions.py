@@ -20,7 +20,7 @@ current_fn: Optional[FnEntry] = None
 
 
 class TypeCheckResult():
-    def __init__(self, type: JSPDLType, value: str | int | bool | None = None, identifier: str | None = None, offset: int | None = None, scope: cg.OperandScope | None = None):
+    def __init__(self, type: JSPDLType, value: str | int | None = None, identifier: str | None = None, offset: int | None = None, scope: cg.OperandScope | None = None):
         self.type = type
         self.value = value
         self.identifier = identifier
@@ -102,7 +102,7 @@ def assignment_statement(node: Node):
     var.value = expression_checked.value
     # TODO check if var.offset is the one
     cg.c3d_queue.append(
-        f"{identifier} := {expression_checked.value if expression_checked.value else expression_checked.identifier}")
+        f"{identifier} := {id_if_not_literal_value(expression_checked)}")
     cg.quartet_queue.append(
         Quartet(
             Operation.ASSIGN,
@@ -111,9 +111,12 @@ def assignment_statement(node: Node):
     return TypeCheckResult(JSPDLType.VOID)
 
 
-def value_to_typed_value(node: Node) -> str | int | bool:
+def value_to_typed_value(node: Node) -> str | int:
     if node.type == "literal_boolean":
-        return True if unwrap_text(node.text) == "true" else False
+        if unwrap_text(node.text) == "true":
+            return 1
+        else:
+            return 0
     if node.type == "literal_number":
         return int(unwrap_text(node.text))
     elif node.type == "literal_string":
@@ -161,16 +164,20 @@ def get_trs_from_ts_with_id(identifier: str, node: Node):
 
 
 def get_trs_from_ts_with_id_and_value(identifier: str, node: Node):
-    var = st.current_symbol_table[identifier] if identifier in st.current_symbol_table else st.global_symbol_table[identifier]
-    if isinstance(var, FnEntry):
-        print_error(TypeMismatchError(
-            node, JSPDLType.FUNCTION, var.type))
+    try:
+        var = st.current_symbol_table[identifier] if identifier in st.current_symbol_table else st.global_symbol_table[identifier]
+        if isinstance(var, FnEntry):
+            print_error(TypeMismatchError(
+                node, JSPDLType.FUNCTION, var.type))
+            return TypeCheckResult(JSPDLType.INVALID)
+        assert isinstance(var, VarEntry)
+        if var.value == None:
+            print_error(NonInitializedError(node))
+            return TypeCheckResult(JSPDLType.INVALID)
+        return TypeCheckResult(type=var.type, identifier=identifier, offset=var.offset)
+    except KeyError:
+        print_error(UndeclaredVariableError(node))
         return TypeCheckResult(JSPDLType.INVALID)
-    assert isinstance(var, VarEntry)
-    if var.value == None:
-        print_error(NonInitializedError(node))
-        return TypeCheckResult(JSPDLType.INVALID)
-    return TypeCheckResult(type=var.type, identifier=identifier, offset=var.offset)
 
 
 def value(node: Node) -> TypeCheckResult:
@@ -203,7 +210,17 @@ def or_expression(node: Node) -> TypeCheckResult:
     left = rule_functions[node_left.type](node_left)
     right = rule_functions[node_right.type](node_right)
     if check_left_right_type_eq(left, right, node_left, node_right, left.type):
-        return TypeCheckResult(JSPDLType.BOOLEAN)
+        cg.c3d_queue.append(
+            f"t{cg.temporal_counter} := {id_if_not_literal_value(left)} || {id_if_not_literal_value(right)}")
+        cg.temporal_counter += 1
+        cg.quartet_queue.append(
+            Quartet(Operation.OR,
+                    Operand(left.value, left.offset, left.scope),
+                    Operand(right.value, right.offset, right.scope),
+                    res=Operand(value=".A", scope=cg.OperandScope.TEMPORAL)
+                    )
+        )
+        return TypeCheckResult(JSPDLType.BOOLEAN,  value=f"t{cg.temporal_counter-1}", scope=cg.OperandScope.TEMPORAL)
     else:
         return TypeCheckResult(JSPDLType.INVALID)
 
@@ -220,6 +237,7 @@ def equality_expression(node: Node) -> TypeCheckResult:
 
 
 def id_if_not_literal_value(x: TypeCheckResult):
+
     return x.value if not x.identifier else x.identifier
 
 

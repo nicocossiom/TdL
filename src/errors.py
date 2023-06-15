@@ -34,11 +34,9 @@ class SyntaxError(Error):
 class UndeclaredVariableError(Error):
     def __init__(self, node: Node):
         super().__init__(node)
-        self.identifier = self.node.child_by_field_name("identifier")
 
     def __repr__(self):
-        assert self.identifier is not None
-        return f"{super().__repr__()}: variable '{unwrap_text(self.identifier.text)}' is not declared in any scope"
+        return f"{super().__repr__()}: variable '{unwrap_text(self.node.text)}' is not declared in any scope"
 
 
 class UndeclaredFunctionCallError(Error):

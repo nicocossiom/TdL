@@ -101,6 +101,28 @@ class ActivationRegister:
 #             static_memory_end += 1
 
 
+
+def find_op(o: Operand) -> str:
+    if o.scope == OperandScope.TEMPORAL:
+        return ".A"
+    if o.value is None:
+        assert o.offset is not None
+        if o.scope == OperandScope.GLOBAL:
+            return f"#{o.offset-1}[.IY]"
+        elif o.scope == OperandScope.LOCAL:
+            return f"#{o.offset-1}[.IX]"
+        else:
+            raise CodeGenException(
+                f"Operand {o} has an invalid scope {o.scope}")
+    if isinstance(o.value, bool):
+        return "#"+"1" if o.value else "0"
+    # its a string
+    return f"#{o.value}"
+
+
+
+
+
 def gen_code():
     # count_global_memory()
     print("3Instruction code generation:")
@@ -153,29 +175,20 @@ def gen_inc(q: Quartet) -> str:
 
 
 def gen_or(q: Quartet) -> str:
-    return ""
+    if not q.op1 or not q.op2 or not q.res:
+        raise CodeGenException(
+            "Addition operation must have at least two operands and a result")
+    else:
+        return gen_instr(f"OR {find_op(q.op1)}, {find_op(q.op2)} ; OR op1, op2")
 
 
 def gen_equals(q: Quartet) -> str:
+    if not q.op1 or not q.op2 or not q.res:
+        raise CodeGenException(
+            "Addition operation must have at least two operands and a result")
+    else:
+        return gen_instr(f"CMP {find_op(q.op1)}, {find_op(q.op2)} ; EQUALS op1, op2") and gen_instr(f"BZ {find_op(q.res)},{find_op(q.op1)} ; ASSIGN op1, res")
     return ""
-
-
-def find_op(o: Operand) -> str:
-    if o.scope == OperandScope.TEMPORAL:
-        return ".A"
-    if o.value is None:
-        assert o.offset is not None
-        if o.scope == OperandScope.GLOBAL:
-            return f"#{o.offset-1}[.IY]"
-        elif o.scope == OperandScope.LOCAL:
-            return f"#{o.offset-1}[.IX]"
-        else:
-            raise CodeGenException(
-                f"Operand {o} has an invalid scope {o.scope}")
-    if isinstance(o.value, bool):
-        return "#"+"1" if o.value else "0"
-    # its a string
-    return f"#{o.value}"
 
 
 def gen_assign(q: Quartet) -> str:
@@ -184,7 +197,7 @@ def gen_assign(q: Quartet) -> str:
         raise CodeGenException(
             "Assign operation must have at least one operand and a result")
 
-    return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)} ; ASSIGN op1, res")
+    return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)} ; ASSIGN op1, res") 
 
 
 def gen_goto(q: Quartet) -> str:

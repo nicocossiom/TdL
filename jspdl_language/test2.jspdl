@@ -1,4 +1,9 @@
-let int c; 
-let int a; 
-a = 1; 
-c = a++; 
+let boolean a; 
+a = true; 
+let boolean b; 
+b = false; 
+let boolean c; 
+c = false; 
+let boolean d; 
+d = false; 
+a = a || b || c || d; 
