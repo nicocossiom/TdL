@@ -4,7 +4,7 @@ from tree_sitter import Node
 
 import symbol_table as st
 from ast_util import unwrap_text
-from code_gen import Operation, Quartet, quartet_queue
+from code_gen import Operand, Operation, Quartet, quartet_queue
 from errors import (CallWithInvalidArgumentsError, InvalidArgumentError,
                     InvalidReturnInScopeError, NonInitializedError,
                     PreDeclarationError, ReturnTypeMismatchError,
@@ -85,17 +85,11 @@ def assignment_statement(node: Node):
             var.type), expression_checked, var.node, expression, var.type):
         return TypeCheckResult(JSPDLType.INVALID)
     # Assignment is correct
-    # get scope of variable
-    print(
-        f"st.current_symbol_table used in other module{st.current_symbol_table}")
     scope = get_sope(identifier)
-
     var.value = expression_checked.value
-    op = Operation.ASSIGN
     # TODO check if var.offset is the one
-    q: Quartet = (op, (var.offset, scope),
-                  (expression_checked.value, scope), None)
-    quartet_queue.append(q)
+    quartet_queue.append(Quartet(Operation.ASSIGN, Operand(var.offset, scope),
+                         res=expression_checked.value))
     return TypeCheckResult(JSPDLType.VOID)
     # quartet_queue.put(
     # )

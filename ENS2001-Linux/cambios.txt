@@ -1,0 +1,23 @@
+14/06/2019:
+
+En este documento se comentarán los cambios realizados en los ficheros fuente del programa para solucionar los errores y warnings que aparecían en la compilación de la versión para LINUX:
+
+- Se ha eliminado la clase runtime_exception del fichero defscpp.h, ya que se producía una ambigüedad con la clase del mismo nombre de la librería std.
+
+- Se ha hecho un casting explícito a las constantes de tipo cadena de los ficheros fuente para convertirlas en char *, ya que el compilador producía un warning al realizar el casting de manera implícita.
+
+- Se ha cambiado el fichero cadenas_ansi.h por el fichero cadenas_ascii.h en el fichero compilación.h, ya que el fichero cadenas_ansi.h contiene los mensajes que lanza el programa para la versión de Windows, mientras que el otro fichero, contiene los mensajes para Unix. Sin embargo, este último fichero contenía caracteres que no siguen la codificación del juego de caracteres que tiene asignada el compilador GCC por defecto, por lo que se producía un warning. Para poder solucionarlo, se han quitado dichos caracteres y se han reconstruido los mensajes utilizando caracteres sin tildes (ni la ñ). De esta manera, se pueden evitar problemas futuros problemas relacionados con la codificación de caracteres.
+
+- Se ha cambiado el operador de comparación de la sentencia:
+	respuesta==VolcarPila(parametro1);
+del fichero cinterfazconsola.cpp, en la línea 1189, ya que no se hacía nada con el valor devuelto y, en la siguiente rama del if se realizaba una asignación a la variable respuesta. Por lo que se supuso que la persona que programó esta herramienta se confundió con los operadores == y =, que son muy similares a simple vista.
+
+- Se han quitado los typedef de las estructuras ya que se produce un warning al no darles nombre.
+
+- Se han creado las cabeceras de las siguientes funciones en el fichero ens.y, puesto que se llaman antes de estar declaradas y se produce un warning:
+	- int yylex();
+	- int AlmacenaInstruccion(int operandos);
+	- int yyerror(char *s);
+	- void yyrestart(FILE * file);
+
+- Se ha cambiado ens2001.o por ens2001 en el remove del fichero MakeFile, ya este ultimo es el nombre del ejecutable que se genera al compilar.

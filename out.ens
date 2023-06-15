@@ -1,0 +1,12 @@
+
+;-----------------------------------------------------------------------------------------
+                        ORG 0
+                        MOVE #static_memory_start, .IY
+                        MOVE #50,#0[.IY] ; ASSIGN op1, res
+                        MOVE #26,#1[.IY] ; ASSIGN op1, res
+
+                        HALT
+static_memory_start:    RES 2 ; reserve 2 memory addresses for global variables
+                        END
+;----------------------------------------------------------------------------------------
+    
