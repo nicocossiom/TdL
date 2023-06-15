@@ -144,7 +144,7 @@ def post_increment_statement(node: Node) -> TypeCheckResult | Any:
                 Operand(offset=var.offset, scope=scope),
                 )
     )
-    return TypeCheckResult(JSPDLType.INT, var.value)
+    return TypeCheckResult(JSPDLType.INT, identifier=identifier, offset=var.offset, scope=scope)
 
 
 def get_trs_from_ts_with_id(identifier: str, node: Node):
@@ -182,7 +182,7 @@ def value(node: Node) -> TypeCheckResult:
     node = node.children[0]
     match node.type:
         case "post_increment_statement":
-            return post_increment_statement(node.named_children[0])
+            return post_increment_statement(node)
         case "literal_string":
             return TypeCheckResult(JSPDLType.STRING, value_to_typed_value(node))
         case "literal_number":
