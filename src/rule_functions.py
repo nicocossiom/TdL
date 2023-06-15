@@ -140,10 +140,8 @@ def post_increment_statement(node: Node) -> TypeCheckResult | Any:
     scope = get_scope(identifier)
     cg.c3d_queue.append(f"{identifier} := {identifier} + 1")
     cg.quartet_queue.append(
-        Quartet(Operation.ADD,
+        Quartet(Operation.INC,
                 Operand(offset=var.offset, scope=scope),
-                Operand(value=1),
-                Operand(offset=var.offset, scope=scope)
                 )
     )
     return TypeCheckResult(JSPDLType.INT, var.value)

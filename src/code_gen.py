@@ -16,6 +16,7 @@ class Operation(Enum):
     PARAM = 6
     CALL = 7
     RETURN = 8
+    INC = 9
 
     def __repr__(self) -> str:
         return self.name
@@ -142,13 +143,14 @@ def gen_add(q: Quartet) -> str:
 
     return gen_instr(f"ADD {find_op(q.op1)}, {find_op(q.op2)} ; ADD op1, op2")
 
+
 def gen_inc(q: Quartet) -> str:
     if not q.op1:
         raise CodeGenException(
             "Increment operation must have an operand")
 
     return gen_instr(f"INC {find_op(q.op1)} ; INC op1")
-    
+
 
 def gen_or(q: Quartet) -> str:
     return ""
@@ -210,6 +212,7 @@ code_gen_dict: dict[Operation, Callable[[Quartet], str]] = {
     Operation.PARAM:  gen_param,
     Operation.RETURN:  gen_return,
     Operation.CALL:  gen_call,
+    Operation.INC:  gen_inc,
 }
 
 
