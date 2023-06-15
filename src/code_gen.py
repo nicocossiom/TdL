@@ -73,6 +73,24 @@ def c3d_write_all():
         c3d_file.write(code + "\n")
 
 
+class MachineState:
+    def __init__(self, registers: list[int], ret_addr: int) -> None:
+        pass
+
+
+class ActivationRegister:
+    def __init__(self,
+                 machine_state: Optional[MachineState] = None,
+                 paramaters: Optional[list[int]] = None,
+                 local_vars: Optional[list[int]] = None,
+                 temp_vars: Optional[list[int]] = None,
+                 ret_val: Optional[int] = None
+                 ):
+        self.machine_state = machine_state
+        self.paramaters = paramaters
+        self.local_vars = local_vars
+        self.temp_vars = temp_vars
+        self.ret_val = ret_val
 # def count_global_memory():
 #     for q in quartet_queue:
 #         if q.op1 and q.op1.scope == OperandScope.GLOBAL:
@@ -119,9 +137,8 @@ def gen_add(q: Quartet) -> str:
     if not q.op1 or not q.op2 or not q.res:
         raise CodeGenException(
             "Addition operation must have at least two operands and a result")
-
-    # si esta en TS global, acceder por .IY si esta en TS local acceder por .IX
-    return ""
+        
+    return gen_instr(f"ADD {find_op(q.op1)}, {find_op(q.op2)} ; ADD op1, op2")
 
 
 def gen_or(q: Quartet) -> str:
@@ -133,15 +150,21 @@ def gen_equals(q: Quartet) -> str:
 
 
 def find_op(o: Operand) -> str:
-    if o.scope == OperandScope.GLOBAL:
-
-        return ".IY"
-    elif o.scope == OperandScope.LOCAL:
-        return ".IX"
-    else:
-        raise CodeGenException(
-            f"Operand {o} has an invalid scope {o.scope}")
-    return ""
+    if o.scope == OperandScope.TEMPORAL:
+        return ".A"
+    if o.value is None:
+        assert o.offset is not None
+        if o.scope == OperandScope.GLOBAL:
+            return f"#{o.offset-1}[.IY]"
+        elif o.scope == OperandScope.LOCAL:
+            return f"#{o.offset-1}[.IX]"
+        else:
+            raise CodeGenException(
+                f"Operand {o} has an invalid scope {o.scope}")
+    if isinstance(o.value, bool):
+        return "#"+"1" if o.value else "0"
+    # its a string
+    return f"#{o.value}"
 
 
 def gen_assign(q: Quartet) -> str:
@@ -150,30 +173,7 @@ def gen_assign(q: Quartet) -> str:
         raise CodeGenException(
             "Assign operation must have at least one operand and a result")
 
-    if q.op1.scope == OperandScope.GLOBAL:
-        if q.op1.offset is None:
-            raise CodeGenException(
-                "Global variable must have an offset to be accessed")
-        op_processed = ""
-        if q.op1.value is None:
-            assert q.op1.offset is not None
-            op_processed = "#" + str(
-                q.op1.offset - 1) + "[.IY]" if q.op1.scope == OperandScope.GLOBAL else "#" + str(q.op1.offset-1) + "[.IX]"
-        else:
-            op_processed = "#"+str(q.op1.value)
-        static_memory_current_offset += q.op1.offset
-        print(f"\tassign: dir 0x{static_memory_current_offset} = {q.res}")
-        res_processed = ""
-        if q.res.value is None:
-            assert q.res.offset is not None
-            res_processed = "#" + str(
-                q.res.offset - 1) + "[.IY]" if q.res.scope == OperandScope.GLOBAL else "#" + str(q.res.offset-1) + "[.IX]"
-        else:
-            res_processed = "#"+str(q.res.value)
-
-        return gen_instr(f"MOVE {res_processed},{op_processed} ; ASSIGN op1, res")
-    else:
-        return ""
+    return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)} ; ASSIGN op1, res")
 
 
 def gen_goto(q: Quartet) -> str:

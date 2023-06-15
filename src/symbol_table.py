@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, List, NamedTuple, Optional, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Union
 
 from tree_sitter import Node
 
@@ -28,6 +28,12 @@ size_dict: Dict[JSPDLType, int] = {
     JSPDLType.BOOLEAN: 1,
     JSPDLType.STRING: 64,
 }
+
+
+def get_size(t: JSPDLType, val: Any) -> int:
+    if t == JSPDLType.STRING:
+        return len(val)
+    return size_dict[t]
 
 
 def get_scope(identifier: str) -> OperandScope:

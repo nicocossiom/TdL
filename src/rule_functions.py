@@ -20,12 +20,12 @@ current_fn: Optional[FnEntry] = None
 
 
 class TypeCheckResult():
-    def __init__(self, type: JSPDLType, value: str | int | bool | None = None, identifier: str | None = None, offset: int | None = None):
+    def __init__(self, type: JSPDLType, value: str | int | bool | None = None, identifier: str | None = None, offset: int | None = None, scope: cg.OperandScope | None = None):
         self.type = type
         self.value = value
         self.identifier = identifier
         self.offset = offset
-        self.scope = get_scope(identifier) if identifier is not None else None
+        self.scope = get_scope(identifier) if identifier is not None else scope
 
     def __repr__(self) -> str:
         rep = "("
@@ -111,13 +111,13 @@ def assignment_statement(node: Node):
     return TypeCheckResult(JSPDLType.VOID)
 
 
-def value_to_typed_value(node: Node) -> int | str | bool:
-    if node.type == "literal_string":
-        return unwrap_text(node.text)
-    elif node.type == "literal_number":
-        return int(unwrap_text(node.text))
-    elif node.type == "literal_boolean":
+def value_to_typed_value(node: Node) -> str | int | bool:
+    if node.type == "literal_boolean":
         return True if unwrap_text(node.text) == "true" else False
+    if node.type == "literal_number":
+        return int(unwrap_text(node.text))
+    elif node.type == "literal_string":
+        return unwrap_text(node.text)
     else:
         raise Exception(f"Unknown value type {node.type}")
 
@@ -230,6 +230,17 @@ def addition_expression(node: Node) -> TypeCheckResult:
         left = value(node_left)
         right = value(node_right)
         if check_left_right_type_eq(left, right, node_left, node_right, JSPDLType.INT):
+            assert isinstance(left.value, int)
+            assert isinstance(right.value, int)
+            cg.quartet_queue.append(
+                Quartet(
+                    Operation.ADD,
+                    Operand(left.value, offset=left.offset, scope=left.scope),
+                    Operand(right.value, offset=right.offset,
+                            scope=right.scope),
+                    Operand(value=".A", scope=cg.OperandScope.TEMPORAL)
+                )
+            )
             return TypeCheckResult(JSPDLType.INT)
         else:
             return TypeCheckResult(JSPDLType.INVALID)
@@ -239,7 +250,17 @@ def addition_expression(node: Node) -> TypeCheckResult:
     left = addition_expression(node_left)
     right = value(node_right)
     if check_left_right_type_eq(left, right, node_left, node_right, JSPDLType.INT):
-        return TypeCheckResult(JSPDLType.INT)
+        # assert isinstance(left.value, int)
+        # assert isinstance(right.value, int)
+        cg.quartet_queue.append(
+            Quartet(
+                Operation.ADD,
+                Operand(value=".A", scope=cg.OperandScope.TEMPORAL),
+                Operand(right.value, offset=right.offset, scope=right.scope),
+                Operand(scope=cg.OperandScope.TEMPORAL)
+            )
+        )
+        return TypeCheckResult(JSPDLType.INT, scope=cg.OperandScope.TEMPORAL)
     else:
         return TypeCheckResult(JSPDLType.INVALID)
 
@@ -348,7 +369,7 @@ def argument_declaration(node: Node) -> Argument:
 def function_call(node: Node) -> TypeCheckResult:
     # TODO test
     query = language.query(
-        "(function_call ( identifier ) @identifier ( argument_list) @argument_list)")
+        "(function_call ( identifier ) @identifier ( argument_list)? @argument_list)")
     captures = query.captures(node)
     identifier = unwrap_text(captures[0][0].text)
     if identifier not in st.current_symbol_table or identifier not in st.global_symbol_table:
