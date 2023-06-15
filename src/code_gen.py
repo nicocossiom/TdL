@@ -142,6 +142,13 @@ def gen_add(q: Quartet) -> str:
 
     return gen_instr(f"ADD {find_op(q.op1)}, {find_op(q.op2)} ; ADD op1, op2")
 
+def gen_inc(q: Quartet) -> str:
+    if not q.op1:
+        raise CodeGenException(
+            "Increment operation must have an operand")
+
+    return gen_instr(f"INC {find_op(q.op1)} ; INC op1")
+    
 
 def gen_or(q: Quartet) -> str:
     return ""

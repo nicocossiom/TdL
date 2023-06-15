@@ -51,7 +51,7 @@ def print_tree_named(tree: Tree):
                 branches.remove(depth)
             prefix += '└── '
 
-        print(prefix + node.type)
+        print(f"{prefix}{node.type} : {unwrap_text(node.text)}")
 
 
 class ASTUtil():

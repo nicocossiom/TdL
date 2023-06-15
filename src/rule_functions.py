@@ -123,6 +123,7 @@ def value_to_typed_value(node: Node) -> str | int | bool:
 
 
 def post_increment_statement(node: Node) -> TypeCheckResult | Any:
+    node = node.children[0]
     identifier = unwrap_text(node.text)
     if identifier not in st.current_symbol_table and identifier not in st.global_symbol_table:
         print_error(UndeclaredVariableError(node))
@@ -137,6 +138,7 @@ def post_increment_statement(node: Node) -> TypeCheckResult | Any:
         print_error(NonInitializedError(node))
         return TypeCheckResult(var.type)
     scope = get_scope(identifier)
+    cg.c3d_queue.append(f"{identifier} := {identifier} + 1")
     cg.quartet_queue.append(
         Quartet(Operation.ADD,
                 Operand(offset=var.offset, scope=scope),
