@@ -152,9 +152,9 @@ static_memory_start:    RES {static_memory_size} ; reserve {static_memory_size} 
         f.write(assembly)
 
 
-def gen_instr(ins: str) -> str:
+def gen_instr(ins: str, comment: str = "") -> str:
     padding = " " * 24
-    return f"{padding}{ins}\n"
+    return f"{padding}{ins}\t\t\t;{comment}\n"
 
 
 def gen_add(q: Quartet) -> str:
@@ -162,7 +162,7 @@ def gen_add(q: Quartet) -> str:
         raise CodeGenException(
             "Addition operation must have at least two operands and a result")
 
-    return gen_instr(f"ADD {find_op(q.op1)}, {find_op(q.op2)} ; ADD op1, op2")
+    return gen_instr(f"ADD {find_op(q.op1)}, {find_op(q.op2)}", "ADD op1, op2")
 
 
 def gen_inc(q: Quartet) -> str:
@@ -170,28 +170,28 @@ def gen_inc(q: Quartet) -> str:
         raise CodeGenException(
             "Increment operation must have an operand")
 
-    return gen_instr(f"INC {find_op(q.op1)} ; INC op1")
+    return gen_instr(f"INC {find_op(q.op1)}", "INC op1")
 
 
 def gen_or(q: Quartet) -> str:
     if not q.op1 or not q.op2 or not q.res:
         raise CodeGenException(
-            "Addition operation must have at least two operands and a result")
+            "OR operation must have at least two operands and a result")
     else:
-        return gen_instr(f"OR {find_op(q.op1)}, {find_op(q.op2)} ; OR op1, op2")
+        return gen_instr(f"OR {find_op(q.op1)}, {find_op(q.op2)}", "OR op1, op2")
 
 
 def gen_equals(q: Quartet) -> str:
     if not q.op1 or not q.op2 or not q.res:
         raise CodeGenException(
-            "Addition operation must have at least two operands and a result")
+            "Equals operation must have at least two operands and a result")
     else:
         return \
-            gen_instr(f"CMP {find_op(q.op1)}, {find_op(q.op2)} ; CMP op1, op2") + \
-            gen_instr(f"BZ $5 ; true #1. (5 bc opcode1+op1.1+op1.2+opcode2+op2.1 ) ") + \
-            gen_instr(f"MOVE #0, {find_op(q.res)} ; equal ? false") + \
-            gen_instr(f"BR $3 ; skip next instr (3 bc opcode+op1+op2)") + \
-            gen_instr(f"MOVE #1, {find_op(q.res)} ; equal ? true")
+            gen_instr(f"CMP {find_op(q.op1)}, {find_op(q.op2)}", "CMP op1, op2") + \
+            gen_instr("BZ $5",  "true #1. (5 bc opcode1+op1.1+op1.2+opcode2+op2.1 ) ") + \
+            gen_instr(f"MOVE #0, {find_op(q.res)}", " equal ? false") + \
+            gen_instr("BR $3", "skip next instr (3 bc opcode+op1+op2)") + \
+            gen_instr(f"MOVE #1, {find_op(q.res)}", "equal ? true")
 
 
 def gen_assign(q: Quartet) -> str:
@@ -200,7 +200,7 @@ def gen_assign(q: Quartet) -> str:
         raise CodeGenException(
             "Assign operation must have at least one operand and a result")
 
-    return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)} ; ASSIGN op1, res")
+    return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)}", "ASSIGN op1, res")
 
 
 def gen_goto(q: Quartet) -> str:
