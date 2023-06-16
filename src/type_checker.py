@@ -14,7 +14,8 @@ from errors import (CallWithInvalidArgumentsError, InvalidArgumentError,
                     UndeclaredVariableError, print_error)
 from language import language
 from symbol_table import (Argument, DefinedFomOperation, FnEntry, JSPDLType,
-                          SymbolTable, Undefined, VarEntry, size_dict)
+                          SymbolTable, Undefined, VarEntry, VarEntryValType,
+                          size_dict)
 
 
 def get_scope(identifier: str) -> cg.OperandScope:
@@ -48,12 +49,10 @@ class TypeCheckResult():
                  offset: int | None = None,
                  scope: cg.OperandScope | None = None,
                  c3d_rep: str | None = None,
-                 code_gen_rep: str | None = None
                  ):
         self.type = type
         self.value = value
         self.c3d_rep = c3d_rep
-        self.code_gen_rep = code_gen_rep
         self.identifier = identifier
         self.offset = offset
         self.scope = get_scope(identifier) if identifier is not None else scope
@@ -73,19 +72,17 @@ def check_left_right_type_eq(
     right: TypeCheckResult,
     node_left: Node,
     node_right: Node,
-    wanted_type: JSPDLType | list[JSPDLType],
+    expected_types: list[JSPDLType],
 ) -> bool:
     if left.type != right.type:
-        if left.type == wanted_type:
+        if left.type not in expected_types:
             node = node_right
         else:
             node = node_left
         print_error(TypeMismatchError(node, [left.type], right.type))
         return False
-    if left.type != wanted_type:
-        if not isinstance(wanted_type, list):
-            wanted_type = [wanted_type]
-        print_error(TypeMismatchError(node_left, wanted_type, left.type))
+    if left.type not in expected_types:
+        print_error(TypeMismatchError(node_left, expected_types, left.type))
         return False
     return True
 
@@ -97,10 +94,8 @@ def let_statement(node: Node):
     let_type = unwrap_text(captures[0][0].text)
     let_identifier = unwrap_text(captures[1][0].text)
     if let_identifier not in st.current_symbol_table:
-        offset = size_dict[JSPDLType(let_type)]
         st.current_symbol_table[let_identifier] = VarEntry(
-            type=let_type, value=Undefined(), offset=offset, node=node)
-        cg.static_memory_size += offset
+            type=let_type, value=Undefined(), node=node)
         return TypeCheckResult(JSPDLType.VOID)
     else:
         pred_node = st.current_symbol_table[let_identifier]
@@ -128,7 +123,7 @@ def assignment_statement(node: Node):
             node, expression_checked.type, var.type))
         return TypeCheckResult(JSPDLType.INVALID)
     if not check_left_right_type_eq(TypeCheckResult(
-            var.type), expression_checked, var.node, expression, var.type):
+            var.type), expression_checked, var.node, expression, [var.type]):
         return TypeCheckResult(JSPDLType.INVALID)
     # Assignment is correct
     scope = get_scope(identifier)
@@ -180,16 +175,25 @@ def post_increment_statement(node: Node) -> TypeCheckResult | Any:
     return TypeCheckResult(JSPDLType.INT, identifier=identifier, offset=var.offset, scope=scope)
 
 
-def get_trs_from_ts_with_id(identifier: str, node: Node):
+def get_trs_from_ts_with_id(identifier: str, node: Node, modify: VarEntryValType | None = None):
     if identifier not in st.current_symbol_table and identifier not in st.global_symbol_table:
         print_error(UndeclaredVariableError(node))
         return TypeCheckResult(JSPDLType.INVALID)
-    var = st.current_symbol_table[identifier] if identifier in st.current_symbol_table else st.global_symbol_table[identifier]
+    table_origin = None
+    if identifier in st.current_symbol_table:
+        var = st.current_symbol_table[identifier]
+        table_origin = st.current_symbol_table
+    else:
+        var = st.global_symbol_table[identifier]
+        table_origin = st.global_symbol_table
     if isinstance(var, FnEntry):
         print_error(TypeMismatchError(
             node, [JSPDLType.FUNCTION], var.type))
         return TypeCheckResult(JSPDLType.INVALID)
     assert isinstance(var, VarEntry)
+    if modify:
+        table_origin[identifier].value = modify  # type: ignore
+    var.value
     return TypeCheckResult(var.type, scope=get_scope(identifier), offset=var.offset, identifier=identifier)
 
 
@@ -213,11 +217,6 @@ def get_trs_from_ts_with_id_and_value(identifier: str, node: Node):
 
 
 def value(node: Node) -> TypeCheckResult:
-    # $.post_increment_statement,
-    # $.literal_string,
-    # $.literal_number,
-    # $.literal_boolean
-    # this are the possible queries
     node = node.children[0]
     match node.type:
         case "post_increment_statement":
@@ -227,16 +226,34 @@ def value(node: Node) -> TypeCheckResult:
             return get_trs_from_ts_with_id_and_value(identifier, node)
         case "literal_string":
             literal_val = get_value_as_str_from_node(node)
-            return TypeCheckResult(JSPDLType.STRING, cg.OpVal(literal_val), c3d_rep=literal_val)
+            return TypeCheckResult(
+                JSPDLType.STRING,
+                cg.OpVal(rep=cg.OpValRep(
+                    rep_value=literal_val,
+                    rep_type=cg.OpValRepType.LITERAL
+                )),
+                c3d_rep=literal_val, scope=cg.OperandScope.TEMPORAL
+            )
         case "literal_number":
             literal_val = get_value_as_str_from_node(node)
-            # 3cd representation for inmeadite value is #value
-            return TypeCheckResult(JSPDLType.INT, cg.OpVal(literal_val), c3d_rep=f"#{literal_val}")
+            return TypeCheckResult(
+                JSPDLType.INT,
+                cg.OpVal(rep=cg.OpValRep(
+                    rep_value=f"#{literal_val}",
+                    rep_type=cg.OpValRepType.LITERAL
+                )),
+                c3d_rep=literal_val, scope=cg.OperandScope.TEMPORAL
+            )
         case "literal_boolean":
-            # booleans are represented as 1 and 0 hence they are literal numbers
-            # 3cd representation for inmeadite value is #value
             literal_val = get_value_as_str_from_node(node)
-            return TypeCheckResult(JSPDLType.BOOLEAN, cg.OpVal(literal_val), c3d_rep=f"#{literal_val}")
+            return TypeCheckResult(
+                JSPDLType.BOOLEAN,
+                cg.OpVal(rep=cg.OpValRep(
+                    rep_value=f"#{literal_val}",
+                    rep_type=cg.OpValRepType.LITERAL
+                )),
+                c3d_rep=literal_val, scope=cg.OperandScope.TEMPORAL
+            )
         case _:
             raise Exception(f"Unknown value type {node.type}")
 
@@ -244,12 +261,11 @@ def value(node: Node) -> TypeCheckResult:
 def or_expression(node: Node) -> TypeCheckResult:
     node_left = node.named_children[0]
     node_right = node.named_children[1]
-    left = rule_functions[node_left.type](node_left)
-    right = rule_functions[node_right.type](node_right)
-    if check_left_right_type_eq(left, right, node_left, node_right, left.type):
+    left: TypeCheckResult = rule_functions[node_left.type](node_left)
+    right: TypeCheckResult = rule_functions[node_right.type](node_right)
+    if check_left_right_type_eq(left, right, node_left, node_right, [left.type]):
         cg.c3d_queue.append(
-            f"t{cg.temporal_counter} := {id_if_not_literal_value(left)} || {id_if_not_literal_value(right)}")
-        cg.temporal_counter += 1
+            f"{cg.get_new_temporal()} := {left.c3d_rep} || {right.c3d_rep}")
         res_op_val = cg.OpVal(rep=cg.OpValRep(cg.OpValRepType.ACCUMULATOR))
         cg.quartet_queue.append(
             Quartet(Operation.OR,
@@ -259,7 +275,7 @@ def or_expression(node: Node) -> TypeCheckResult:
                                 scope=cg.OperandScope.TEMPORAL)
                     )
         )
-        return TypeCheckResult(JSPDLType.BOOLEAN, c3d_rep=f"t{cg.temporal_counter-1}", code_gen_rep=".A", scope=cg.OperandScope.TEMPORAL)
+        return TypeCheckResult(JSPDLType.BOOLEAN, value=res_op_val, c3d_rep=cg.get_last_temporal(), scope=cg.OperandScope.TEMPORAL)
     else:
         return TypeCheckResult(JSPDLType.INVALID)
 
@@ -267,15 +283,15 @@ def or_expression(node: Node) -> TypeCheckResult:
 def equality_expression(node: Node) -> TypeCheckResult:
     node_left = node.named_children[0]
     node_right = node.named_children[1]
-    left = rule_functions[node_left.type](node_left)
-    right = rule_functions[node_right.type](node_right)
-    if check_left_right_type_eq(left, right, node_left, node_right, left.type):
+    left: TypeCheckResult = rule_functions[node_left.type](node_left)
+    right: TypeCheckResult = rule_functions[node_right.type](node_right)
+    if check_left_right_type_eq(left, right, node_left, node_right, [left.type]):
         cg.c3d_queue.append(
             f"""if {id_if_not_literal_value(left)} == {id_if_not_literal_value(right)} goto true
-t{cg.temporal_counter} := 0
+{cg.get_new_temporal()} := 0
 goto next
 true: 
-t{cg.temporal_counter} := 1
+{cg.get_new_temporal()} := 1
 next:
 """
         )
@@ -288,12 +304,10 @@ next:
                                 scope=cg.OperandScope.TEMPORAL)
                     )
         )
-        cg.temporal_counter += 1
         return TypeCheckResult(
             JSPDLType.BOOLEAN,
             value=res_op_val,
-            c3d_rep=f"t{cg.temporal_counter}",
-            code_gen_rep=".R2",
+            c3d_rep=cg.get_new_temporal(),
             scope=cg.OperandScope.TEMPORAL
         )
     else:
@@ -314,12 +328,10 @@ def addition_expression(node: Node) -> TypeCheckResult:
         node_right = captures[1][0]
         left = value(node_left)
         right = value(node_right)
-        if check_left_right_type_eq(left, right, node_left, node_right, JSPDLType.INT):
-            cg.c3d_queue.append("t" + str(cg.temporal_counter) +
+        if check_left_right_type_eq(left, right, node_left, node_right, [JSPDLType.INT]):
+            cg.c3d_queue.append(cg.get_new_temporal() +
                                 " := " + str(left.value) + " + " + str(right.value))
-            cg.temporal_counter += 1
-            res_op_val = cg.OpVal(rep=cg.OpValRep(
-                cg.OpValRepType.REGISTER, ".A"))
+            res_op_val = cg.OpVal(rep=cg.OpValRep(cg.OpValRepType.ACCUMULATOR))
             cg.quartet_queue.append(
                 Quartet(
                     Operation.ADD,
@@ -330,7 +342,7 @@ def addition_expression(node: Node) -> TypeCheckResult:
                     Operand(value=res_op_val,  scope=cg.OperandScope.TEMPORAL)
                 )
             )
-            return TypeCheckResult(JSPDLType.INT, value=res_op_val, c3d_rep=f"t{+ cg.temporal_counter - 1}", code_gen_rep=".A", scope=cg.OperandScope.TEMPORAL)
+            return TypeCheckResult(JSPDLType.INT, value=res_op_val, c3d_rep=cg.get_last_temporal(), scope=cg.OperandScope.TEMPORAL)
         else:
             return TypeCheckResult(JSPDLType.INVALID)
 
@@ -338,12 +350,10 @@ def addition_expression(node: Node) -> TypeCheckResult:
     node_right = node.named_children[1]
     left = addition_expression(node_left)
     right = value(node_right)
-    if check_left_right_type_eq(left, right, node_left, node_right, JSPDLType.INT):
+    if check_left_right_type_eq(left, right, node_left, node_right, [JSPDLType.INT]):
         cg.c3d_queue.append(
-            f"t{cg.temporal_counter} := {left.c3d_rep} + {id_if_not_literal_value(right)}")
-        cg.temporal_counter += 1
-        res_op_val = cg.OpVal(rep=cg.OpValRep(
-            cg.OpValRepType.REGISTER, ".A"))
+            f"{cg.get_new_temporal()} := {left.c3d_rep} + {id_if_not_literal_value(right)}")
+        res_op_val = cg.OpVal(rep=cg.OpValRep(cg.OpValRepType.ACCUMULATOR))
         cg.quartet_queue.append(
             Quartet(
                 Operation.ADD,
@@ -353,37 +363,54 @@ def addition_expression(node: Node) -> TypeCheckResult:
                 Operand(value=res_op_val, scope=cg.OperandScope.TEMPORAL)
             )
         )
-        return TypeCheckResult(JSPDLType.INT, value=res_op_val, c3d_rep=f"t{cg.temporal_counter}", code_gen_rep=".A", scope=cg.OperandScope.TEMPORAL)
+        return TypeCheckResult(JSPDLType.INT, value=res_op_val, c3d_rep=cg.get_last_temporal(), scope=cg.OperandScope.TEMPORAL)
     else:
         return TypeCheckResult(JSPDLType.INVALID)
 
 
 def input_statement(node: Node) -> TypeCheckResult:
     identifier_node = node.named_children[0]
-    identifier = unwrap_text(identifier_node.text)
-    trs = get_trs_from_ts_with_id(identifier, identifier_node)
-    expected_types = [JSPDLType.INT, JSPDLType.STRING]
-    if (check_left_right_type_eq(trs, TypeCheckResult(JSPDLType.STRING), identifier_node, identifier_node, expected_types)) \
-            or \
-            (check_left_right_type_eq(trs, TypeCheckResult(JSPDLType.INT), identifier_node, identifier_node, expected_types)):
-        cg.quartet_queue.append(
-            Quartet(
-                Operation.INPUT,
-                Operand(value=trs.value, offset=trs.offset,
-                        op_type=trs.type, scope=trs.scope),
-            )
-        )
-        return TypeCheckResult(trs.type, scope=trs.scope, identifier=identifier)
-    else:
+    trs: TypeCheckResult = get_trs_from_ts_with_id(
+        unwrap_text(identifier_node.text), identifier_node, modify=DefinedFomOperation())
+    if trs.type not in [JSPDLType.INT, JSPDLType.STRING]:
+        print_error(InvalidArgumentError(node))
         return TypeCheckResult(JSPDLType.INVALID)
+    cg.quartet_queue.append(
+        Quartet(
+            Operation.INPUT,
+            Operand(value=trs.value, offset=trs.offset,
+                    op_type=trs.type, scope=trs.scope),
+        )
+    )
+    return TypeCheckResult(JSPDLType.VOID)
 
 
 def print_statement(node: Node):
     expression = node.named_children[0]
-    expres_checked = rule_functions[expression.type](expression)
+    expres_checked: TypeCheckResult = rule_functions[expression.type](
+        expression)
     if expres_checked.type not in [JSPDLType.INT, JSPDLType.STRING, JSPDLType.BOOLEAN]:
         print_error(InvalidArgumentError(node))
         return TypeCheckResult(JSPDLType.INVALID)
+    if expres_checked.type == JSPDLType.STRING:
+        if expres_checked.value is not None and expres_checked.value.rep is not None \
+                and expres_checked.value.rep.rep_type == cg.OpValRepType.LITERAL:
+            assert expres_checked.value.rep.rep_value is not None
+            lit_n = len(cg.literals_queue)
+            cg.literals_queue.append(
+                cg.gen_instr(
+                    f"lit{lit_n+1}: DATA {expres_checked.value.rep.rep_value}")
+            )
+            expres_checked.value.rep.rep_value = f"/lit{lit_n +1}"
+
+    cg.quartet_queue.append(
+        Quartet(
+            Operation.PRINT,
+            Operand(value=expres_checked.value, offset=expres_checked.offset,
+                    op_type=expres_checked.type, scope=expres_checked.scope)
+        )
+    )
+    return TypeCheckResult(JSPDLType.VOID)
 
 
 def return_statement(node: Node) -> TypeCheckResult:
@@ -501,6 +528,14 @@ def argument_list(node: Node) -> List[JSPDLType] | None:
             return None
         arg_list.append(val_checked.type)
     return arg_list
+
+
+def do_while_statement(node: Node) -> TypeCheckResult:
+    pass
+
+
+def if_statement(node: Node) -> TypeCheckResult:
+    pass
 
 
 # Get the current module

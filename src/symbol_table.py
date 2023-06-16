@@ -1,6 +1,6 @@
 from enum import Enum
 # Add Type argument to fix the error
-from typing import Any, Dict, List, NamedTuple, Type, Union
+from typing import Dict, List, NamedTuple, Type, Union
 
 from tree_sitter import Node
 
@@ -41,24 +41,21 @@ size_dict: Dict[JSPDLType, int] = {
 }
 
 
-def get_size(t: JSPDLType, val: Any) -> int:
-    if t == JSPDLType.STRING:
-        return len(val)
-    return size_dict[t]
-
-
 class Entry:
     def __init__(self, type: JSPDLType, node: Node) -> None:
         self.type = type
         self.node = node
 
 
-class VarEntry(Entry):
-    def __init__(self, type: str, value: Union[str, bool, int] | Undefined | DefinedFomOperation, offset: int, node: Node):
+VarEntryValType = Union[str, bool, int] | Undefined | DefinedFomOperation
 
+
+class VarEntry(Entry):
+    def __init__(self, type: str, value: VarEntryValType, node: Node):
         super().__init__(JSPDLType(type), node)
         self.value = value
-        self.offset = offset
+        self.size = size_dict[self.type]
+        self.offset = -1
 
 
 class Argument(NamedTuple):
@@ -77,6 +74,7 @@ class FnEntry(Entry):
 class SymbolTable:
     def __init__(self) -> None:
         self.entries: Dict[str, Entry] = {}
+        self.current_offset = 0
 
     def __contains__(self, key: str) -> bool:
         return key in self.entries
@@ -85,9 +83,9 @@ class SymbolTable:
         return self.entries[key]
 
     def __setitem__(self, key: str, value: Entry) -> None:
-        current_offset = self.entries.__len__()
         if isinstance(value, VarEntry):
-            value.offset += current_offset
+            value.offset = self.current_offset
+            self.current_offset += value.size
         self.entries[key] = value
 
     def __repr__(self) -> str:

@@ -1,12 +1,26 @@
 from enum import Enum
 from typing import Callable, Optional
 
+import symbol_table as st
 from symbol_table import JSPDLType
 
 static_memory_size = 0
 static_memory_current_offset = 0
 
 temporal_counter = 0
+
+is_in_global_scope = True
+
+
+def get_new_temporal() -> str:
+    global temporal_counter
+    temporal_counter += 1
+    return f"t{temporal_counter}"
+
+
+def get_last_temporal() -> str:
+    global temporal_counter
+    return f"t{temporal_counter}"
 
 
 OpValActualValues = int | str | bool
@@ -133,32 +147,16 @@ class Quartet:
 quartet_queue: list[Quartet] = []
 c3d_file = open("out.3ic", "w")
 c3d_queue: list[str] = []
+# list of [et DATA "someliteralstring" ... ] to be generated before
+literals_queue: list[str] = []
+
+RA_stack: list[int] = []
 
 
 def c3d_write_all():
     for code in c3d_queue:
         print(code)
         c3d_file.write(code + "\n")
-
-
-class MachineState:
-    def __init__(self, registers: list[int], ret_addr: int) -> None:
-        pass
-
-
-class ActivationRegister:
-    def __init__(self,
-                 machine_state: Optional[MachineState] = None,
-                 paramaters: Optional[list[int]] = None,
-                 local_vars: Optional[list[int]] = None,
-                 temp_vars: Optional[list[int]] = None,
-                 ret_val: Optional[int] = None
-                 ):
-        self.machine_state = machine_state
-        self.paramaters = paramaters
-        self.local_vars = local_vars
-        self.temp_vars = temp_vars
-        self.ret_val = ret_val
 
 
 def find_op(o: Operand) -> str:
@@ -168,9 +166,9 @@ def find_op(o: Operand) -> str:
     if o.value is None:
         assert o.offset is not None
         if o.scope == OperandScope.GLOBAL:
-            return f"#{o.offset-1}[.IY]"
+            return f"#{o.offset}[.IY]"
         elif o.scope == OperandScope.LOCAL:
-            return f"#{o.offset-1}[.IX]"
+            return f"#{o.offset}[.IX]"
         else:
             raise CodeGenException(
                 f"Operand {o} has an invalid scope {o.scope}")
@@ -178,7 +176,9 @@ def find_op(o: Operand) -> str:
 
 
 def gen_code():
-    # count_global_memory()
+    # static memory = global variables = local variables of main function
+    static_memory_size = st.global_symbol_table.current_offset
+
     print("3Instruction code generation:")
     print("------------------------------")
     c3d_write_all()
@@ -187,20 +187,30 @@ def gen_code():
     assembly = """
 ;-----------------------------------------------------------------------------------------
                         ORG 0
-                        MOVE #static_memory_start, .IY
 """
+    if static_memory_size > 0:
+        assembly += gen_instr("MOVE #static_memory_start, .IY",
+                              "intialize IY to point to the start of the static memory")
+
     print("Quartets generated:")
     for q in quartet_queue:
         # call the function that generates the code for the operation
         print(f"\t{q}")
         assembly += code_gen_dict[q.op](q)
-    assembly += f"""
+    assembly += """
                         HALT
-static_memory_start:    RES {static_memory_size} ; reserve {static_memory_size} memory addresses for global variables
+"""
+    assembly += "\n".join(literals_queue)  # add literals to assembly
+    if static_memory_size > 0:
+        assembly += f"""
+        static_memory_start:    RES {static_memory_size} ; reserve {static_memory_size} memory addresses for global variables
+        """
+    assembly += """
                         END
 ;----------------------------------------------------------------------------------------
     """
-    print("Assembly code:")
+    print(f"Assembly code:{assembly}")
+
     print("Assembly code generated successfully, written to .ens file")
     with open("out.ens", "w") as f:
         f.write(assembly)
@@ -258,7 +268,11 @@ def gen_assign(q: Quartet) -> str:
 
 
 def gen_goto(q: Quartet) -> str:
-    return ""
+    if not q.op1:
+        raise CodeGenException(
+            "Goto operation must recieve an operand")
+
+    return gen_instr(f"BR ${q.op1.value}", "jumps to the tag specified in the operand")
 
 
 def gen_param(q: Quartet) -> str:
@@ -267,7 +281,7 @@ def gen_param(q: Quartet) -> str:
             "Parameter operation must have at least one operand")
     else:
         return \
-            gen_instr(f"ADD {find_op(q.op1)}, .IX", "ADD #Tam_RA_llamador, .IX") + \
+            gen_instr(f"ADD , .IX", "ADD #Tam_RA_llamador, .IX") + \
             gen_instr(f"ADD #1, .A", "ADD #1, .A") + \
             gen_instr(f"MOVE {find_op(q.op1)} [.A], ", "MOVE op1, [.A];")
 
@@ -295,10 +309,16 @@ def gen_print(q: Quartet) -> str:
     if not q.op1:
         raise CodeGenException(
             "Print operation must have at least one operand")
-    if q.op1.offset == JSPDLType.INT:  # is an integer or boolean
-        return gen_instr(f"WRINT {find_op(q.op1)}", "WRINT op1")
-    else:  # is a string
+
+    if q.op1.op_type == JSPDLType.STRING:  # is string
         return gen_instr(f"WRSTR {find_op(q.op1)}", "WRSTR op1")
+
+    else:  # boolean or int
+        if q.op1.scope == OperandScope.TEMPORAL:
+            return gen_instr(f"MOVE {find_op(q.op1)}, .R6", "save literal int  in R6") + \
+                gen_instr("WRINT .R6", "write literal int stored .R6 to console")
+        else:
+            return gen_instr(f"WRINT {find_op(q.op1)}", "WRINT op1")
 
 
 code_gen_dict: dict[Operation, Callable[[Quartet], str]] = {
