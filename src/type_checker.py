@@ -13,8 +13,8 @@ from errors import (CallWithInvalidArgumentsError, InvalidArgumentError,
                     TypeMismatchError, UndeclaredFunctionCallError,
                     UndeclaredVariableError, print_error)
 from language import language
-from symbol_table import (Argument, FnEntry, JSPDLType, SymbolTable, VarEntry,
-                          size_dict)
+from symbol_table import (Argument, DefinedFomOperation, FnEntry, JSPDLType,
+                          SymbolTable, Undefined, VarEntry, size_dict)
 
 
 def get_scope(identifier: str) -> cg.OperandScope:
@@ -99,7 +99,7 @@ def let_statement(node: Node):
     if let_identifier not in st.current_symbol_table:
         offset = size_dict[JSPDLType(let_type)]
         st.current_symbol_table[let_identifier] = VarEntry(
-            type=let_type, value=None, offset=offset, node=node)
+            type=let_type, value=Undefined(), offset=offset, node=node)
         cg.static_memory_size += offset
         return TypeCheckResult(JSPDLType.VOID)
     else:
@@ -132,6 +132,8 @@ def assignment_statement(node: Node):
         return TypeCheckResult(JSPDLType.INVALID)
     # Assignment is correct
     scope = get_scope(identifier)
+    assert isinstance(var, VarEntry)
+    var.value = DefinedFomOperation()
     assert isinstance(var, VarEntry)
     # TODO check if var.offset is the one
     cg.c3d_queue.append(
@@ -199,7 +201,7 @@ def get_trs_from_ts_with_id_and_value(identifier: str, node: Node):
                 node, [JSPDLType.FUNCTION], var.type))
             return TypeCheckResult(JSPDLType.INVALID)
         assert isinstance(var, VarEntry)
-        if var.value == None:
+        if isinstance(var.value, Undefined):
             print_error(NonInitializedError(node))
             return TypeCheckResult(JSPDLType.INVALID)
         return TypeCheckResult(
@@ -313,23 +315,22 @@ def addition_expression(node: Node) -> TypeCheckResult:
         left = value(node_left)
         right = value(node_right)
         if check_left_right_type_eq(left, right, node_left, node_right, JSPDLType.INT):
-            assert isinstance(left.value, int)
-            assert isinstance(right.value, int)
             cg.c3d_queue.append("t" + str(cg.temporal_counter) +
                                 " := " + str(left.value) + " + " + str(right.value))
             cg.temporal_counter += 1
+            res_op_val = cg.OpVal(rep=cg.OpValRep(
+                cg.OpValRepType.REGISTER, ".A"))
             cg.quartet_queue.append(
                 Quartet(
                     Operation.ADD,
-                    Operand(value=cg.OpVal(value=left.value),
+                    Operand(value=left.value,
                             offset=left.offset, scope=left.scope),
-                    Operand(value=cg.OpVal(right.value),
+                    Operand(value=right.value,
                             offset=right.offset, scope=right.scope),
-                    Operand(value=cg.OpVal(rep=cg.OpValRep(
-                        cg.OpValRepType.REGISTER, ".A")), scope=cg.OperandScope.TEMPORAL)
+                    Operand(value=res_op_val,  scope=cg.OperandScope.TEMPORAL)
                 )
             )
-            return TypeCheckResult(JSPDLType.INT, c3d_rep=f"t{+ cg.temporal_counter - 1}", code_gen_rep=".A", scope=cg.OperandScope.TEMPORAL)
+            return TypeCheckResult(JSPDLType.INT, value=res_op_val, c3d_rep=f"t{+ cg.temporal_counter - 1}", code_gen_rep=".A", scope=cg.OperandScope.TEMPORAL)
         else:
             return TypeCheckResult(JSPDLType.INVALID)
 
@@ -339,19 +340,20 @@ def addition_expression(node: Node) -> TypeCheckResult:
     right = value(node_right)
     if check_left_right_type_eq(left, right, node_left, node_right, JSPDLType.INT):
         cg.c3d_queue.append(
-            f"t{cg.temporal_counter} := {id_if_not_literal_value(left)} + {id_if_not_literal_value(right)}")
+            f"t{cg.temporal_counter} := {left.c3d_rep} + {id_if_not_literal_value(right)}")
         cg.temporal_counter += 1
+        res_op_val = cg.OpVal(rep=cg.OpValRep(
+            cg.OpValRepType.REGISTER, ".A"))
         cg.quartet_queue.append(
             Quartet(
                 Operation.ADD,
-                Operand(value=cg.OpVal(value=".A", rep=cg.OpValRep(
-                    cg.OpValRepType.ACCUMULATOR)), scope=cg.OperandScope.TEMPORAL),
+                Operand(value=left.value, scope=cg.OperandScope.TEMPORAL),
                 Operand(value=right.value, offset=right.offset,
                         scope=right.scope),
-                Operand(scope=cg.OperandScope.TEMPORAL)
+                Operand(value=res_op_val, scope=cg.OperandScope.TEMPORAL)
             )
         )
-        return TypeCheckResult(JSPDLType.INT, c3d_rep=f"t{cg.temporal_counter}", code_gen_rep=".A", scope=cg.OperandScope.TEMPORAL)
+        return TypeCheckResult(JSPDLType.INT, value=res_op_val, c3d_rep=f"t{cg.temporal_counter}", code_gen_rep=".A", scope=cg.OperandScope.TEMPORAL)
     else:
         return TypeCheckResult(JSPDLType.INVALID)
 

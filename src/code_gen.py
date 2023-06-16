@@ -110,12 +110,7 @@ class Operand:
         self.op_type = op_type
 
     def __repr__(self) -> str:
-        rep = "("
-        for attr in self.__dict__:
-            if attr in ["value", "offset", "scope"] and self.__dict__[attr] is not None:
-                rep += f"{attr}={self.__dict__[attr]},"
-        rep += ")"
-        return rep
+        return f"(value={self.value}, offset={self.offset}, scope={self.scope}, op_type={self.op_type})"
 
 
 class Quartet:
@@ -131,7 +126,7 @@ class Quartet:
         self.res: Optional[Operand] = res
 
     def __repr__(self) -> str:
-        return f"({self.op}, op1={self.op1}, op2={self.op2}, res={self.res})"
+        return f"({self.op}\n\t\top1={self.op1},\n\t\top2={self.op2}\n\t\tres={self.res}\n\t)"
 
 
 # queue of quartets to be processed after code is type-checked -> all quartets are generated
@@ -189,7 +184,6 @@ def gen_code():
     c3d_write_all()
     print("------------------------------")
     print(f"Static memory needed to be allocated = {static_memory_size}")
-    print("Assembly code:")
     assembly = """
 ;-----------------------------------------------------------------------------------------
                         ORG 0
@@ -206,8 +200,8 @@ static_memory_start:    RES {static_memory_size} ; reserve {static_memory_size} 
                         END
 ;----------------------------------------------------------------------------------------
     """
-    print(f"final assembly: \n{assembly}")
-    print("Assembly code generated successfully, generating .ens file...")
+    print("Assembly code:")
+    print("Assembly code generated successfully, written to .ens file")
     with open("out.ens", "w") as f:
         f.write(assembly)
 

@@ -1,9 +1,21 @@
 from enum import Enum
-from typing import Any, Dict, List, NamedTuple, Optional, Union
+# Add Type argument to fix the error
+from typing import Any, Dict, List, NamedTuple, Type, Union
 
 from tree_sitter import Node
 
 from ast_util import unwrap_text
+
+
+class Undefined:
+    pass
+
+
+class DefinedFomOperation:
+    pass
+
+
+UndefinedType: Type[Undefined] = Undefined
 
 
 class JSPDLType(Enum):
@@ -42,7 +54,8 @@ class Entry:
 
 
 class VarEntry(Entry):
-    def __init__(self, type: str, value: Optional[Union[str, bool, int]], offset: int, node: Node):
+    def __init__(self, type: str, value: Union[str, bool, int] | Undefined | DefinedFomOperation, offset: int, node: Node):
+
         super().__init__(JSPDLType(type), node)
         self.value = value
         self.offset = offset
