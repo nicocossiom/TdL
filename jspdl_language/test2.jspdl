@@ -1,5 +1,2 @@
-let int a; 
-a = 2 + 4 + 6; 
-let boolean d; 
-d = true || true; 
-d = a == 5 + 2 || d;
+let boolean a; 
+a = 1 == 1; 

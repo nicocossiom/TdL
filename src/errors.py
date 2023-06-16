@@ -87,13 +87,13 @@ class PreDeclarationError(Error):
 
 class TypeMismatchError(Error):
 
-    def __init__(self, node: Node, expected_type: JSPDLType, actual_type: JSPDLType):
+    def __init__(self, node: Node, expected_types: list[JSPDLType] | JSPDLType, actual_type: JSPDLType):
         super().__init__(node)
-        self.expected_type = expected_type
+        self.expected_types = expected_types
         self.actual_type = actual_type
 
     def __repr__(self):
-        return f"{super().__repr__()}: expected type {self.expected_type} but got {self.actual_type}"
+        return f"{super().__repr__()}: expected type {self.expected_types} but got {self.actual_type}"
 
 
 class NonInitializedError(Error):

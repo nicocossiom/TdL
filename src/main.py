@@ -2,7 +2,7 @@
 import os
 import sys
 
-from colorama import init
+from colorama import Fore, init
 from tree_sitter import Tree
 
 import globals
@@ -91,7 +91,10 @@ def main() -> None:
     tree = parser.parse(bytes(code, 'utf8'))
     execute_options(tree, code)
     check_parsing_errors(tree)
-    ast_type_check_tree(tree)
+    if not ast_type_check_tree(tree):
+        print(f"{Fore.RED}Type checking failed")
+        print("Code generation aborted, errors need to be fixed in order to generate code")
+        exit(-1)
     gen_code()
 
 

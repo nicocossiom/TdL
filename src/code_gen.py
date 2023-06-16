@@ -1,10 +1,71 @@
 from enum import Enum
 from typing import Callable, Optional
 
+from symbol_table import JSPDLType
+
 static_memory_size = 0
 static_memory_current_offset = 0
 
 temporal_counter = 0
+
+
+OpValActualValues = int | str | bool
+
+
+class OpValRepType(Enum):
+    """
+    Possible types of representations of an OpValue
+    """
+    ACCUMULATOR = 1
+    LITERAL = 2
+    REGISTER = 3
+
+    def __repr__(self) -> str:
+        """
+        Returns ACCUMULATOR, LITERAL or REGISTER in string format
+        """
+        return self.name.replace("OpValRep.OpValRepType.", "")
+
+
+class OpValRep():
+    """
+    Represents how can OpValue in an Operand of a Quartet must be represented
+    """
+
+    def __init__(self, rep_type: OpValRepType, rep_value: Optional[str] = None) -> None:
+        # value of the representation (e.g. "t1", ".R2", ".A")
+        self.rep_value = rep_value
+        # type of the representation (e.g. ACCUMULATOR, LITERAL, REGISTER)
+        if rep_type == OpValRepType.ACCUMULATOR:
+            self.rep_value = ".A"
+        self.rep_type = rep_type
+
+    def __repr__(self) -> str:
+        """
+        Returns a representation for the operand value with type and value (e.g. "ACCUMULATOR .A", "REGISTER .R2", "TEMPORAL t1")
+        """
+        return f"{self.rep_type} {self.rep_value}"
+
+    def __str__(self) -> str:
+        """
+        Returns a representation for the operand value with value only (e.g. ".A", ".R2", "t1")
+        This is the method that python uses for representation when printing or if used in an fstring
+        """
+        assert self.rep_value is not None
+        return self.rep_value
+
+
+class OpVal:
+    """
+    Represents a value of an operand in a Quartet
+    """
+
+    def __init__(self, value: Optional[OpValActualValues] = None, rep: Optional[OpValRep] = None) -> None:
+        self.value = value
+        self.rep = rep
+
+    def __repr__(self) -> str:
+        return f"{self.value if self.value is not None else ''}{self.rep if self.rep is not None else ''}"
 
 
 class Operation(Enum):
@@ -17,9 +78,11 @@ class Operation(Enum):
     CALL = 7
     RETURN = 8
     INC = 9
+    PRINT = 10
+    INPUT = 11
 
     def __repr__(self) -> str:
-        return self.name
+        return self.name.replace("Operation.", "")
 
 
 class OperandScope(Enum):
@@ -34,15 +97,17 @@ class OperandScope(Enum):
         return str(self)
 
 
-OpVal = int | str | bool | None
-OpOffset = int | None
-
-
 class Operand:
-    def __init__(self, value: OpVal = None, offset: OpOffset = None, scope: OperandScope | None = None):
+    def __init__(self,
+                 value: Optional[OpVal] = None,
+                 offset: Optional[int] = None,
+                 scope: OperandScope | None = None,
+                 op_type: JSPDLType | None = None
+                 ):
         self.value = value
         self.offset = offset
         self.scope = scope
+        self.op_type = op_type
 
     def __repr__(self) -> str:
         rep = "("
@@ -54,7 +119,12 @@ class Operand:
 
 
 class Quartet:
-    def __init__(self, op: Operation, op1: Operand | None = None, op2: Operand | None = None, res: Operand | None = None) -> None:
+    def __init__(self,
+                 op: Operation,
+                 op1: Operand | None = None,
+                 op2: Operand | None = None,
+                 res: Operand | None = None
+                 ) -> None:
         self.op: Operation = op
         self.op1: Optional[Operand] = op1
         self.op2: Optional[Operand] = op2
@@ -94,19 +164,12 @@ class ActivationRegister:
         self.local_vars = local_vars
         self.temp_vars = temp_vars
         self.ret_val = ret_val
-# def count_global_memory():
-#     for q in quartet_queue:
-#         if q.op1 and q.op1.scope == OperandScope.GLOBAL:
-#             global static_memory_end
-#             static_memory_end += 1
 
 
 def find_op(o: Operand) -> str:
     if o.scope == OperandScope.TEMPORAL:
-        assert isinstance(o.value, str)
-        if o.value.startswith("t"):
-            return ".A"
-        return o.value
+        return str(o.value)  # return the representation given by OpValRep
+
     if o.value is None:
         assert o.offset is not None
         if o.scope == OperandScope.GLOBAL:
@@ -116,9 +179,6 @@ def find_op(o: Operand) -> str:
         else:
             raise CodeGenException(
                 f"Operand {o} has an invalid scope {o.scope}")
-    if isinstance(o.value, bool):
-        return "#"+"1" if o.value else "0"
-    # its a string
     return f"#{o.value}"
 
 
@@ -208,7 +268,14 @@ def gen_goto(q: Quartet) -> str:
 
 
 def gen_param(q: Quartet) -> str:
-    return ""
+    if not q.op1:
+        raise CodeGenException(
+            "Parameter operation must have at least one operand")
+    else:
+        return \
+            gen_instr(f"ADD {find_op(q.op1)}, .IX", "ADD #Tam_RA_llamador, .IX") + \
+            gen_instr(f"ADD #1, .A", "ADD #1, .A") + \
+            gen_instr(f"MOVE {find_op(q.op1)} [.A], ", "MOVE op1, [.A];")
 
 
 def gen_return(q: Quartet) -> str:
@@ -217,6 +284,27 @@ def gen_return(q: Quartet) -> str:
 
 def gen_call(q: Quartet) -> str:
     return ""
+
+
+def gen_input(q: Quartet) -> str:
+    if not q.op1:
+        raise CodeGenException(
+            "Input operation must have at least one operand")
+
+    if q.op1.op_type == JSPDLType.INT:  # is an integer or boolean
+        return gen_instr(f"ININT {find_op(q.op1)}", "ININT op1")
+    else:  # is a string
+        return gen_instr(f"INSTR {find_op(q.op1)}", "INSTR op1")
+
+
+def gen_print(q: Quartet) -> str:
+    if not q.op1:
+        raise CodeGenException(
+            "Print operation must have at least one operand")
+    if q.op1.offset == JSPDLType.INT:  # is an integer or boolean
+        return gen_instr(f"WRINT {find_op(q.op1)}", "WRINT op1")
+    else:  # is a string
+        return gen_instr(f"WRSTR {find_op(q.op1)}", "WRSTR op1")
 
 
 code_gen_dict: dict[Operation, Callable[[Quartet], str]] = {
@@ -229,6 +317,8 @@ code_gen_dict: dict[Operation, Callable[[Quartet], str]] = {
     Operation.RETURN:  gen_return,
     Operation.CALL:  gen_call,
     Operation.INC:  gen_inc,
+    Operation.PRINT:  gen_print,
+    Operation.INPUT:  gen_input,
 }
 
 
@@ -237,4 +327,5 @@ class CodeGenException(Exception):
         self.msg = msg
 
     def __str__(self):
+
         return self.msg

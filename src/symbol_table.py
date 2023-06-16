@@ -4,7 +4,6 @@ from typing import Any, Dict, List, NamedTuple, Optional, Union
 from tree_sitter import Node
 
 from ast_util import unwrap_text
-from code_gen import OperandScope
 
 
 class JSPDLType(Enum):
@@ -34,18 +33,6 @@ def get_size(t: JSPDLType, val: Any) -> int:
     if t == JSPDLType.STRING:
         return len(val)
     return size_dict[t]
-
-
-def get_scope(identifier: str) -> OperandScope:
-    if identifier in current_symbol_table:
-        # it's possible identifier is in both STs, in that case we want the local one to take precedence
-        # it's in both STs and we're in the global one
-        if identifier in global_symbol_table and global_symbol_table == current_symbol_table:
-            return OperandScope.GLOBAL
-        else:
-            return OperandScope.LOCAL
-    raise Exception(
-        "Identifier not found in any symbol table, should not happen")
 
 
 class Entry:
