@@ -99,5 +99,4 @@ class SymbolTable:
 
 # Initialize an empty symbol table
 global_symbol_table: SymbolTable = SymbolTable()
-global_symbol_table["main"] = FnEntry(JSPDLType.VOID, [], Node())
 current_symbol_table: SymbolTable = global_symbol_table

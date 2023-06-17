@@ -8,13 +8,13 @@ import symbol_table as st
 from ast_util import unwrap_text
 from code_gen import Operand, Operation, Quartet
 from errors import (CallWithInvalidArgumentsError, InvalidArgumentError,
-                    InvalidReturnInScopeError, NonInitializedError,
-                    PreDeclarationError, ReturnTypeMismatchError,
-                    TypeMismatchError, UndeclaredFunctionCallError,
-                    UndeclaredVariableError, print_error)
+                    NonInitializedError, PreDeclarationError,
+                    ReturnTypeMismatchError, TypeMismatchError,
+                    UndeclaredFunctionCallError, UndeclaredVariableError,
+                    print_error)
 from language import language
 from symbol_table import (Argument, DefinedFomOperation, FnEntry, JSPDLType,
-                          SymbolTable, Undefined, VarEntry, VarEntryValType)
+                          Undefined, VarEntry, VarEntryValType)
 
 
 def get_scope(identifier: str) -> cg.OperandScope:
@@ -30,6 +30,7 @@ def get_scope(identifier: str) -> cg.OperandScope:
 
 
 def ast_type_check_tree(tree: Tree):
+    st.global_symbol_table["main"] = FnEntry(JSPDLType.VOID, [], tree.root_node)
     type_check_result = True
     for child in tree.root_node.named_children:
         if rule_functions[child.type](child).type == JSPDLType.INVALID:
