@@ -3,7 +3,7 @@ module.exports = grammar({
 
 	rules: {
 		program: $ => repeat(choice(
-			$._statement,
+			$._statement_and_declaration,
 			$.function_declaration
 		)),
 
@@ -12,9 +12,12 @@ module.exports = grammar({
 			'boolean',
 			'string'
 		)),
+		_statement_and_declaration: $ => choice(
+			$.let_statement,
+			$._statement),
+		block_and_declaration: $ => seq('{', repeat($._statement_and_declaration), '}'),
 		block: $ => seq('{', repeat($._statement), '}'),
 		_statement: $ => choice(
-			$.let_statement,
 			$.if_statement,
 			$.do_while_statement,
 			$.return_statement,
@@ -26,10 +29,9 @@ module.exports = grammar({
 
 		),
 		let_statement: $ => seq('let', field("type", $.type), field("identifier", $.identifier), ';'),
-		if_statement: $ => seq('if', '(', field("if_condition", $._expression), ')', field("if_body", $._statement)),
+		if_statement: $ => seq('if', '(', field("if_condition", $._expression), ')', field("if_body", choice($._statement, $.block))),
 		do_while_statement: $ =>
-			seq('do', '{', repeat($._statement), '}',
-				'while', '(', field("do_while_condition", $._expression), ')', ';'),
+			seq('do', field("do_while_body", $.block), 'while', '(', field("do_while_condition", $._expression), ')', ';'),
 		return_statement: $ => seq('return', field("return_value", optional($._expression)), ';'),
 		print_statement: $ => seq('print', '(', $._expression, ')', ';'),
 		input_statement: $ => seq('input', '(', $.identifier, ')', ';'),
@@ -44,7 +46,7 @@ module.exports = grammar({
 			$.identifier,
 			optional($.type),
 			$.argument_declaration_list,
-			$.block
+			$.block_and_declaration
 		),
 
 		argument_declaration_list: $ =>

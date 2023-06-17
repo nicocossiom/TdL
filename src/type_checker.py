@@ -38,7 +38,7 @@ def ast_type_check_tree(tree: Tree):
 
 
 current_fn: Optional[FnEntry] = None
-tag_counter=0;
+
 
 class TypeCheckResult():
     def __init__(self,
@@ -396,7 +396,7 @@ def print_statement(node: Node):
             lit_n = len(cg.literals_queue)
             cg.literals_queue.append(
                 cg.gen_instr(
-                    f"lit{lit_n+1}: DATA {expres_checked.value.rep.rep_value}")
+                    f"lit{lit_n+1}: DATA \"{expres_checked.value.rep.rep_value}\"")
             )
             expres_checked.value.rep.rep_value = f"/lit{lit_n +1}"
 
@@ -528,15 +528,26 @@ def argument_list(node: Node) -> List[JSPDLType] | None:
 
 
 def do_while_statement(node: Node) -> TypeCheckResult:
-    pass
+    do_while_condition = node.child_by_field_name("do_while_condition")
+    do_while_body = node.child_by_field_name("do_while_body")
+    print(do_while_condition)
+    print(do_while_body)
+
+
+tag_counter = 0
 
 
 def if_statement(node: Node) -> TypeCheckResult:
-     # TODO test
-    query = language.query(
-        "(if_statement ( identifier ) @identifier ( argument_list)? @argument_list)")
-    
-    pass
+    # TODO test
+    if_condition = node.child_by_field_name("if_condition")
+    if_body = node.child_by_field_name("if_body")
+    assert isinstance(if_condition, Node)
+    assert isinstance(if_body, Node)
+    if_condition_checked = rule_functions[if_condition.type](if_condition)
+    if_body_checked = rule_functions[if_body.type](if_body)
+    if (if_condition_checked.type == JSPDLType.INVALID or if_body_checked.type == JSPDLType.INVALID):
+        return TypeCheckResult(JSPDLType.INVALID)
+    return TypeCheckResult(JSPDLType.VOID)
 
 
 # Get the current module
