@@ -69,14 +69,6 @@ class CallWithInvalidArgumentsError(Error):
         return f"{super().__repr__()}: call to '{unwrap_text(self.node.text)}' with invalid arguments: expected {self.expected_types} but got {self.actual_types}"
 
 
-class InvalidReturnInScopeError(Error):
-    def __init__(self, node: Node):
-        super().__init__(node)
-
-    def __repr__(self):
-        return f"{super().__repr__()}: current scope is not a function declaration"
-
-
 class PreDeclarationError(Error):
     def __init__(self, node: Node, predeclared_node: Node):
         super().__init__(node)

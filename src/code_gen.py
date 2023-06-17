@@ -103,6 +103,7 @@ class Operation(Enum):
     IF_TAG = 13
     WHILE_TRUE = 14
     WHILE_TAG = 15
+    FUNCTION_TAG = 16
 
     def __repr__(self) -> str:
         return self.name.replace("Operation.", "")
@@ -367,25 +368,6 @@ def gen_while_tag(_quartet: Quartet) -> str:
     return ret_val
 
 
-def gen_param(q: Quartet) -> str:
-    if not q.op1:
-        raise CodeGenException(
-            "Parameter operation must have at least one operand")
-    else:
-        return \
-            gen_instr("ADD , .IX", "ADD #Tam_RA_llamador, .IX") + \
-            gen_instr("ADD #1, .A", "ADD #1, .A") + \
-            gen_instr(f"MOVE {find_op(q.op1)} [.A], ", "MOVE op1, [.A];")
-
-
-def gen_return(q: Quartet) -> str:
-    return ""
-
-
-def gen_call(q: Quartet) -> str:
-    return ""
-
-
 def gen_input(q: Quartet) -> str:
     if not q.op1:
         raise CodeGenException(
@@ -413,14 +395,58 @@ def gen_print(q: Quartet) -> str:
             return gen_instr(f"WRINT {find_op(q.op1)}", "WRINT op1")
 
 
+def gen_function_tag(q: Quartet) -> str:
+    if not q.op1:
+        raise CodeGenException(
+            "Function_tag operation must have at least one operand")
+
+    return f"{q.op1.value}:\n"
+
+
+def gen_function_param(q: Quartet) -> str:
+    if not q.op1:
+        raise CodeGenException(
+            "Parameter operation must have at least one operand")
+    return gen_instr(f"ADD {find_op(q.op1)}, ", "movemos el puntero al siguiente RA") +\
+        gen_instr(f"ADD {find_op(q.op1)}, ", "Nos colocamos en la parte de params de nuestro RA") +\
+        gen_instr(f"MOVE {find_op(q.op1)}, ",
+                  "Pasamos el param a su posicion, la suma anterior incrementa por cada param")
+
+
+# ADD #Tam_RA_llamador, .IX; movemos el puntero al siguiente RA
+# ADD #1, .A; Nos colocamos en la parte de params de nuestro RA
+# MOVE op1, [.A];Pasamos el param a su posicion
+# ;la suma anterior incrementa por cada param
+
+
+def gen_function_return(q: Quartet) -> str:
+    ret_val = ""
+
+    if q.op1:
+        if (q.op1.scope == OperandScope.GLOBAL):
+            return gen_instr("HALT", "si en el programa principal haces un return, paras de ejecutar")
+        # local return from function
+        ret_val += gen_instr("SUB #Tam_RA_p, #X", "X es el tamaño del valor devuelto") + \
+            gen_instr("SUB .A, .IX", "") + \
+            gen_instr(
+                f"MOVE {find_op(q.op1)}, [.A]", "Y es el desplazamiento de op1 en la TS")
+    ret_val += gen_instr("BR [.IX]", "devuelve el control al llamador")
+
+    return ret_val
+
+
+def gen_call(q: Quartet) -> str:
+    return ""
+
+
 code_gen_dict: dict[Operation, Callable[[Quartet], str]] = {
     Operation.ADD: gen_add,
     Operation.OR: gen_or,
     Operation.EQUALS:  gen_equals,
     Operation.ASSIGN:  gen_assign,
     Operation.GOTO:  gen_goto,
-    Operation.PARAM:  gen_param,
-    Operation.RETURN:  gen_return,
+    Operation.PARAM:  gen_function_param,
+    Operation.RETURN:  gen_function_return,
     Operation.CALL:  gen_call,
     Operation.INC:  gen_inc,
     Operation.PRINT:  gen_print,
@@ -428,7 +454,8 @@ code_gen_dict: dict[Operation, Callable[[Quartet], str]] = {
     Operation.IF_FALSE:  gen_if_false_goto,
     Operation.IF_TAG:  gen_if_tag,
     Operation.WHILE_TRUE:  gen_while_true_goto,
-    Operation.WHILE_TAG:  gen_while_tag
+    Operation.WHILE_TAG:  gen_while_tag,
+    Operation.FUNCTION_TAG:  gen_function_tag,
 }
 
 

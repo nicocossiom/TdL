@@ -411,18 +411,39 @@ def print_statement(node: Node):
 
 
 def return_statement(node: Node) -> TypeCheckResult:
-    if (not current_fn):
-        print_error(InvalidReturnInScopeError(node))
-        return TypeCheckResult(JSPDLType.INVALID)
-    query = language.query("(return_statement ( value ) @value)")
+    query = language.query("(return_statement ( value )? @value)")
     captures = query.captures(node)
-    res = TypeCheckResult(JSPDLType.VOID) if (
-        len(captures) == 0) else rule_functions[captures[0][0].type](captures[0][0])
-    if (res.type != current_fn.return_type):
+    if len(captures) == 0:
+        # no return value
+        if st.current_symbol_table == st.global_symbol_table:
+            # return from global
+            cg.quartet_queue.append(
+                Quartet(
+                    Operation.RETURN,
+                    Operand(scope=cg.OperandScope.GLOBAL)
+                )
+            )
+    if st.current_symbol_table == st.global_symbol_table:
+        mainFn = st.global_symbol_table["main"]
+        assert isinstance(mainFn, st.FnEntry)
         print_error(ReturnTypeMismatchError(
-            node, current_fn, res.type))
+            node, mainFn, JSPDLType.VOID))
         return TypeCheckResult(JSPDLType.INVALID)
-    return res
+    value_checked: TypeCheckResult = rule_functions[captures[0][0].type](
+        captures[0][0])
+    global current_fn
+    assert current_fn is not None
+    if value_checked.type != current_fn.return_type:
+        print_error(ReturnTypeMismatchError(
+            node, current_fn, value_checked.type))
+        return TypeCheckResult(JSPDLType.INVALID)
+    cg.quartet_queue.append(
+        Quartet(
+            Operation.RETURN,
+            Operand(value=value_checked.value, offset=value_checked.offset)
+        )
+    )
+    return TypeCheckResult(JSPDLType.VOID)  # no es void pero bueno
 
 
 def function_declaration(node: Node) -> TypeCheckResult:
@@ -433,7 +454,7 @@ def function_declaration(node: Node) -> TypeCheckResult:
       (identifier) @identifier
       (type)? @type
       (argument_declaration_list) @argument_declaration_list
-      (block) @block
+      (block_and_declaration) @block
     )
     """
     )
@@ -449,21 +470,31 @@ def function_declaration(node: Node) -> TypeCheckResult:
                          ) if "type" in capt_dict else JSPDLType.VOID
     args = argument_declaration_list(
         capt_dict["argument_declaration_list"]) if "argument_declaration_list" in capt_dict else []
-    if "block" not in capt_dict:
-        raise Exception("Block not found in function declaration")
-    st.current_symbol_table = SymbolTable()
-    global current_fn
-    current_fn = FnEntry(ret_type, args, node)
-    block_check = rule_functions["block"](capt_dict["block"])
-    if block_check.type == JSPDLType.INVALID:
+    cg.quartet_queue.append(
+        Quartet(
+            Operation.FUNCTION_TAG,
+            Operand(value=cg.OpVal(value=identifier),
+                    op_type=JSPDLType.FUNCTION),
+        )
+    )
+
+    block_checked = rule_functions[capt_dict["block"].type](capt_dict["block"])
+    if block_checked.type == JSPDLType.INVALID:
         return TypeCheckResult(JSPDLType.INVALID)
     st.global_symbol_table[identifier] = FnEntry(ret_type, args, node)
-    st.current_symbol_table = st.global_symbol_table
+    # cg.quartet_queue.append(
+    #     Quartet(
+    #         Operation.,
+    #     )
+    #         Operand()
+    # )
+    global current_fn
+    current_fn = FnEntry(ret_type, args, node)
+    st.global_symbol_table[identifier] = current_fn
     return TypeCheckResult(type=JSPDLType.VOID, identifier=identifier)
 
 
 def block(node: Node) -> TypeCheckResult:
-    # TODO terminar y chequear
     for node in node.named_children:
         if (rule_functions[node.type](node).type == JSPDLType.INVALID):
             return TypeCheckResult(JSPDLType.INVALID)
@@ -471,7 +502,10 @@ def block(node: Node) -> TypeCheckResult:
 
 
 def block_and_declaration(node: Node) -> TypeCheckResult:
-    return block(node)
+    for node in node.named_children:
+        if (rule_functions[node.type](node).type == JSPDLType.INVALID):
+            return TypeCheckResult(JSPDLType.INVALID)
+    return TypeCheckResult(JSPDLType.VOID)
 
 
 def argument_declaration_list(node: Node) -> list[Argument]:
@@ -506,6 +540,13 @@ def function_call(node: Node) -> TypeCheckResult:
     if identifier not in st.current_symbol_table or identifier not in st.global_symbol_table:
         print_error(UndeclaredFunctionCallError(captures[0][0]))
         return TypeCheckResult(JSPDLType.INVALID)
+    ###
+    # st.current_symbol_table = SymbolTable()
+    # global current_fn
+    # current_fn = FnEntry(ret_type, args, node)
+    # st.current_symbol_table = st.global_symbol_table
+    ###
+
     fn = st.current_symbol_table[identifier] if identifier in st.current_symbol_table else st.global_symbol_table[identifier]
     assert isinstance(fn, FnEntry)
     fn_args = [arg.type for arg in fn.arguments]
@@ -536,16 +577,19 @@ def do_while_statement(node: Node) -> TypeCheckResult:
     do_while_body = node.child_by_field_name("do_while_body")
     assert isinstance(do_while_condition, Node)
     assert isinstance(do_while_body, Node)
-
+    # generate tag for start of loop
     cg.quartet_queue.append(Quartet(Operation.WHILE_TAG))
     body_checked = rule_functions[do_while_body.type](do_while_body)
     if body_checked.type == JSPDLType.INVALID:
         return TypeCheckResult(JSPDLType.INVALID)
+    # generate the condition expression
     condition_checked = rule_functions[do_while_condition.type](
         do_while_condition)
     if (condition_checked.type == JSPDLType.INVALID
             or condition_checked.type != JSPDLType.BOOLEAN):
         return TypeCheckResult(JSPDLType.INVALID)
+    # generate the check for the condition with branch back to
+    # the start of the loop if condition is true
     cg.quartet_queue.append(
         Quartet(
             Operation.WHILE_TRUE,
