@@ -1,3 +1,4 @@
+import codecs
 from enum import Enum
 from typing import Callable, Optional
 
@@ -263,8 +264,53 @@ def gen_assign(q: Quartet) -> str:
     if not q.op1 or not q.res:
         raise CodeGenException(
             "Assign operation must have at least one operand and a result")
+    if q.op1.op_type == JSPDLType.STRING:
+        # convert the string to a list of ascii codes and move them to memory
+        if q.op1.scope == OperandScope.LOCAL:
+            # convert the string to a list of ascii codes and move them to memory
+            assert q.op1.value is not None
+            assert q.op1.value.value is not None
+            assert isinstance(q.op1.value.value, str)
+            assert q.op1.offset is not None
 
-    return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)}", "ASSIGN op1, res")
+        if q.op1.scope == OperandScope.GLOBAL:
+            assembly = ""
+            if (q.res.offset is None):
+                assert q.op1.offset is not None
+                assert q.res.value is not None
+                assert q.res.value.rep is not None
+                assert q.res.value.rep.rep_value is not None
+                assert isinstance(q.res.value.rep.rep_value, str)
+                print(f"This is the string: {q.res.value.rep.rep_value}")
+
+                ascii_codes = codecs.escape_decode(
+                    q.res.value.rep.rep_value)[0]
+                print(f"This is the ascii codes: {ascii_codes}")
+                for byte_counter, (byte, char) in enumerate(zip(ascii_codes, q.res.value.rep.rep_value)):
+                    char = char if char not in [
+                        '\n', '\t'] else '\\n' if char == '\n' else '\\t'
+                    assembly += gen_instr(
+                        f"MOVE #{byte}, #{q.op1.offset + byte_counter}[.IY]", f"assigning char '{char}'")
+
+            else:
+                assert q.res.offset is not None
+                if q.res.scope == OperandScope.LOCAL:
+                    pointer = ".IX"
+                    access_register_offset = 1
+                else:
+                    pointer = ".IY"
+                    access_register_offset = 0
+                for byte_counter in range(64):
+                    assert q.op1.offset is not None
+                    assembly += gen_instr(
+                        f"MOVE #{q.res.offset + byte_counter + access_register_offset}[{pointer}], #{q.op1.offset + byte_counter}[.IY]")
+            return assembly
+            # return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)}", "ASSIGN op1, res")
+        else:
+            raise CodeGenException(
+                f"Assign operation has an invalid scope for op1 = {q.op1}")
+    else:
+        return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)}", "ASSIGN op1, res")
 
 
 def gen_goto(q: Quartet) -> str:

@@ -5,7 +5,9 @@ from tree_sitter import Node, Tree
 
 
 def unwrap_text(text: bytes) -> str:
-    return text.decode("utf-8")
+    decoded = text.decode("utf-8")
+    decoded = decoded.strip('"')
+    return decoded
 
 
 def traverse_tree_named(tree: Tree):

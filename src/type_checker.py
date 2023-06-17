@@ -14,8 +14,7 @@ from errors import (CallWithInvalidArgumentsError, InvalidArgumentError,
                     UndeclaredVariableError, print_error)
 from language import language
 from symbol_table import (Argument, DefinedFomOperation, FnEntry, JSPDLType,
-                          SymbolTable, Undefined, VarEntry, VarEntryValType,
-                          size_dict)
+                          SymbolTable, Undefined, VarEntry, VarEntryValType)
 
 
 def get_scope(identifier: str) -> cg.OperandScope:
@@ -39,7 +38,7 @@ def ast_type_check_tree(tree: Tree):
 
 
 current_fn: Optional[FnEntry] = None
-
+tag_counter=0;
 
 class TypeCheckResult():
     def __init__(self,
@@ -125,18 +124,16 @@ def assignment_statement(node: Node):
     if not check_left_right_type_eq(TypeCheckResult(
             var.type), expression_checked, var.node, expression, [var.type]):
         return TypeCheckResult(JSPDLType.INVALID)
-    # Assignment is correct
     scope = get_scope(identifier)
     assert isinstance(var, VarEntry)
     var.value = DefinedFomOperation()
     assert isinstance(var, VarEntry)
-    # TODO check if var.offset is the one
     cg.c3d_queue.append(
         f"{identifier} := {expression_checked.c3d_rep}")
     cg.quartet_queue.append(
         Quartet(
             Operation.ASSIGN,
-            op1=Operand(offset=var.offset, scope=scope),
+            op1=Operand(offset=var.offset, op_type=var.type, scope=scope),
             res=Operand(value=expression_checked.value, offset=expression_checked.offset, scope=expression_checked.scope)))
     return TypeCheckResult(JSPDLType.VOID)
 
@@ -535,6 +532,10 @@ def do_while_statement(node: Node) -> TypeCheckResult:
 
 
 def if_statement(node: Node) -> TypeCheckResult:
+     # TODO test
+    query = language.query(
+        "(if_statement ( identifier ) @identifier ( argument_list)? @argument_list)")
+    
     pass
 
 
