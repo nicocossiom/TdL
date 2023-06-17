@@ -536,14 +536,23 @@ def do_while_statement(node: Node) -> TypeCheckResult:
     do_while_body = node.child_by_field_name("do_while_body")
     assert isinstance(do_while_condition, Node)
     assert isinstance(do_while_body, Node)
+
+    cg.quartet_queue.append(Quartet(Operation.WHILE_TAG))
+    body_checked = rule_functions[do_while_body.type](do_while_body)
+    if body_checked.type == JSPDLType.INVALID:
+        return TypeCheckResult(JSPDLType.INVALID)
     condition_checked = rule_functions[do_while_condition.type](
         do_while_condition)
-    body_checked = rule_functions[do_while_body.type](do_while_body)
     if (condition_checked.type == JSPDLType.INVALID
-            or body_checked.type == JSPDLType.INVALID
             or condition_checked.type != JSPDLType.BOOLEAN):
         return TypeCheckResult(JSPDLType.INVALID)
-
+    cg.quartet_queue.append(
+        Quartet(
+            Operation.WHILE_TRUE,
+            Operand(value=condition_checked.value,
+                    scope=condition_checked.scope),
+        )
+    )
     return TypeCheckResult(JSPDLType.VOID)
 
 

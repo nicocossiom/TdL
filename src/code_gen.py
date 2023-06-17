@@ -101,6 +101,8 @@ class Operation(Enum):
     INPUT = 11
     IF_FALSE = 12
     IF_TAG = 13
+    WHILE_TRUE = 14
+    WHILE_TAG = 15
 
     def __repr__(self) -> str:
         return self.name.replace("Operation.", "")
@@ -293,14 +295,10 @@ def gen_assign(q: Quartet) -> str:
                 assert q.res.value.rep is not None
                 assert q.res.value.rep.rep_value is not None
                 assert isinstance(q.res.value.rep.rep_value, str)
-                print(f"This is the string: {q.res.value.rep.rep_value}")
-
                 ascii_codes = codecs.escape_decode(
                     q.res.value.rep.rep_value)[0]
-                print(f"This is the ascii codes: {ascii_codes}")
                 for byte_counter, (byte, char) in enumerate(zip(ascii_codes, q.res.value.rep.rep_value)):
-                    char = char if char not in [
-                        '\n', '\t'] else '\\n' if char == '\n' else '\\t'
+                    char = '\\n' if char == '\n' else '\\t'
                     assembly += gen_instr(
                         f"MOVE #{byte}, #{q.op1.offset + byte_counter}[.IY]", f"assigning char '{char}'")
 
@@ -344,10 +342,28 @@ def gen_if_false_goto(q: Quartet) -> str:
                   "if comparision is false, jump after the if block")
 
 
-def gen_if_tag_quartet(_quartet: Quartet) -> str:
+def gen_if_tag(_quartet: Quartet) -> str:
     global if_tag_counter
     ret_val = f"if_tag{if_tag_counter}:\n"
     if_tag_counter += 1
+    return ret_val
+
+
+def gen_while_true_goto(q: Quartet) -> str:
+    global while_tag_counter
+    if not q.op1:
+        raise CodeGenException(
+            "If_False_Goto operation must recieve an operand")
+
+    ret_val = gen_instr(f"CMP {find_op(q.op1)}, #1", "compare while condition, if cmp 1 means true") + \
+        gen_instr(f"BZ $while_tag{while_tag_counter}",
+                  "if while condition is true, jump at the beginning of the block")
+    while_tag_counter += 1
+    return ret_val
+
+
+def gen_while_tag(_quartet: Quartet) -> str:
+    ret_val = f"while_tag{while_tag_counter}:\n"
     return ret_val
 
 
@@ -357,8 +373,8 @@ def gen_param(q: Quartet) -> str:
             "Parameter operation must have at least one operand")
     else:
         return \
-            gen_instr(f"ADD , .IX", "ADD #Tam_RA_llamador, .IX") + \
-            gen_instr(f"ADD #1, .A", "ADD #1, .A") + \
+            gen_instr("ADD , .IX", "ADD #Tam_RA_llamador, .IX") + \
+            gen_instr("ADD #1, .A", "ADD #1, .A") + \
             gen_instr(f"MOVE {find_op(q.op1)} [.A], ", "MOVE op1, [.A];")
 
 
@@ -410,7 +426,9 @@ code_gen_dict: dict[Operation, Callable[[Quartet], str]] = {
     Operation.PRINT:  gen_print,
     Operation.INPUT:  gen_input,
     Operation.IF_FALSE:  gen_if_false_goto,
-    Operation.IF_TAG:  gen_if_tag_quartet,
+    Operation.IF_TAG:  gen_if_tag,
+    Operation.WHILE_TRUE:  gen_while_true_goto,
+    Operation.WHILE_TAG:  gen_while_tag
 }
 
 
