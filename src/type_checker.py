@@ -470,6 +470,10 @@ def block(node: Node) -> TypeCheckResult:
     return TypeCheckResult(JSPDLType.VOID)
 
 
+def block_and_declaration(node: Node) -> TypeCheckResult:
+    return block(node)
+
+
 def argument_declaration_list(node: Node) -> list[Argument]:
     arg_list: list[Argument] = []
     query = language.query(
@@ -530,11 +534,17 @@ def argument_list(node: Node) -> List[JSPDLType] | None:
 def do_while_statement(node: Node) -> TypeCheckResult:
     do_while_condition = node.child_by_field_name("do_while_condition")
     do_while_body = node.child_by_field_name("do_while_body")
-    print(do_while_condition)
-    print(do_while_body)
+    assert isinstance(do_while_condition, Node)
+    assert isinstance(do_while_body, Node)
+    condition_checked = rule_functions[do_while_condition.type](
+        do_while_condition)
+    body_checked = rule_functions[do_while_body.type](do_while_body)
+    if (condition_checked.type == JSPDLType.INVALID
+            or body_checked.type == JSPDLType.INVALID
+            or condition_checked.type != JSPDLType.BOOLEAN):
+        return TypeCheckResult(JSPDLType.INVALID)
 
-
-tag_counter = 0
+    return TypeCheckResult(JSPDLType.VOID)
 
 
 def if_statement(node: Node) -> TypeCheckResult:
@@ -543,10 +553,29 @@ def if_statement(node: Node) -> TypeCheckResult:
     if_body = node.child_by_field_name("if_body")
     assert isinstance(if_condition, Node)
     assert isinstance(if_body, Node)
-    if_condition_checked = rule_functions[if_condition.type](if_condition)
-    if_body_checked = rule_functions[if_body.type](if_body)
-    if (if_condition_checked.type == JSPDLType.INVALID or if_body_checked.type == JSPDLType.INVALID):
+    if_condition_checked: TypeCheckResult = rule_functions[if_condition.type](
+        if_condition)
+    if (if_condition_checked.type != JSPDLType.BOOLEAN):
+        if (if_condition_checked.type == JSPDLType.INVALID):
+            return TypeCheckResult(JSPDLType.INVALID)
+        print_error(TypeMismatchError(
+            if_condition, JSPDLType.BOOLEAN, if_condition_checked.type))
         return TypeCheckResult(JSPDLType.INVALID)
+
+    # generar comparacion con 0 y salto a etiqueta
+    cg.quartet_queue.append(
+        Quartet(
+            Operation.IF_FALSE,
+            Operand(value=if_condition_checked.value,
+                    scope=if_condition_checked.scope),
+        )
+    )
+    if_body_checked: TypeCheckResult = rule_functions[if_body.type](if_body)
+    if if_body_checked.type == JSPDLType.INVALID:
+        return TypeCheckResult(JSPDLType.INVALID)
+    # etiq
+    cg.quartet_queue.append(Quartet(Operation.IF_TAG))
+
     return TypeCheckResult(JSPDLType.VOID)
 
 

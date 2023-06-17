@@ -11,6 +11,10 @@ static_memory_current_offset = 0
 temporal_counter = 0
 
 is_in_global_scope = True
+if_tag_counter = 0
+while_tag_counter = 0
+
+assembly = " "
 
 
 def get_new_temporal() -> str:
@@ -95,6 +99,8 @@ class Operation(Enum):
     INC = 9
     PRINT = 10
     INPUT = 11
+    IF_FALSE = 12
+    IF_TAG = 13
 
     def __repr__(self) -> str:
         return self.name.replace("Operation.", "")
@@ -178,6 +184,7 @@ def find_op(o: Operand) -> str:
 
 def gen_code():
     # static memory = global variables = local variables of main function
+    global assembly
     static_memory_size = st.global_symbol_table.current_offset
 
     print("3Instruction code generation:")
@@ -185,7 +192,7 @@ def gen_code():
     c3d_write_all()
     print("------------------------------")
     print(f"Static memory needed to be allocated = {static_memory_size}")
-    assembly = """
+    assembly += """
 ;-----------------------------------------------------------------------------------------
                         ORG 0
 """
@@ -215,6 +222,11 @@ def gen_code():
     print("Assembly code generated successfully, written to .ens file")
     with open("out.ens", "w") as f:
         f.write(assembly)
+
+
+def gen_instr_and_add_to_assembly(ins: str, comment: str = "") -> None:
+    global assembly
+    assembly += gen_instr(ins, comment)
 
 
 def gen_instr(ins: str, comment: str = "") -> str:
@@ -260,7 +272,7 @@ def gen_equals(q: Quartet) -> str:
 
 
 def gen_assign(q: Quartet) -> str:
-    global static_memory_current_offset
+    global static_memory_current_offset, assembly
     if not q.op1 or not q.res:
         raise CodeGenException(
             "Assign operation must have at least one operand and a result")
@@ -321,6 +333,24 @@ def gen_goto(q: Quartet) -> str:
     return gen_instr(f"BR ${q.op1.value}", "jumps to the tag specified in the operand")
 
 
+def gen_if_false_goto(q: Quartet) -> str:
+    if not q.op1:
+        raise CodeGenException(
+            "If_False_Goto operation must recieve an operand")
+    print(f"q.op1.value: {q.op1.value}")
+
+    return gen_instr(f"CMP {find_op(q.op1)}, #0", "compare if condition, if cmp 0 means false") + \
+        gen_instr(f"BZ $if_tag{if_tag_counter}",
+                  "if comparision is false, jump after the if block")
+
+
+def gen_if_tag_quartet(_quartet: Quartet) -> str:
+    global if_tag_counter
+    ret_val = f"if_tag{if_tag_counter}:\n"
+    if_tag_counter += 1
+    return ret_val
+
+
 def gen_param(q: Quartet) -> str:
     if not q.op1:
         raise CodeGenException(
@@ -379,6 +409,8 @@ code_gen_dict: dict[Operation, Callable[[Quartet], str]] = {
     Operation.INC:  gen_inc,
     Operation.PRINT:  gen_print,
     Operation.INPUT:  gen_input,
+    Operation.IF_FALSE:  gen_if_false_goto,
+    Operation.IF_TAG:  gen_if_tag_quartet,
 }
 
 
