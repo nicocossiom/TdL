@@ -201,11 +201,13 @@ def gen_code():
     assembly += """
 ;-----------------------------------------------------------------------------------------
                         ORG 0
+                        MOVE .SP, .IX ; initialize IX to point to the start of the stack
 """
     if static_memory_size > 0:
-        assembly += gen_instr("MOVE #static_memory_start, .IY",
-                              "intialize IY to point to the start of the static memory")
-
+        assembly += gen_instrs(
+            """
+MOVE #static_memory_start, .IY ; intialize IY to point to the start of the static memory
+""")
     print("Quartets generated:")
     for q in quartet_queue:
         # call the function that generates the code for the operation
@@ -331,7 +333,8 @@ def gen_assign(q: Quartet) -> str:
                 ascii_codes = codecs.escape_decode(
                     q.res.value.rep.rep_value)[0]
                 for byte_counter, (byte, char) in enumerate(zip(ascii_codes, q.res.value.rep.rep_value)):
-                    char = '\\n' if char == '\n' else '\\t'
+                    char = '\\n' if char == '\n' else char
+                    char = '\\t' if char == '\t' else char
                     assembly += gen_instr(
                         f"MOVE #{byte}, #{q.op1.offset + byte_counter}[.IY]", f"assigning char '{char}'")
 
