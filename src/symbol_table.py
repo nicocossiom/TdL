@@ -69,6 +69,7 @@ class FnEntry(Entry):
         self.return_type = return_type
         self.arguments: List[Argument] = arguments
         self.arg_size = 0
+        self.has_at_least_one_return = False
         for arg in arguments:
             self.arg_size += size_dict[arg.type]
         self.function_name = unwrap_text(node.named_children[0].text)

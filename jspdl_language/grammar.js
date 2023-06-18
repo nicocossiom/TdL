@@ -23,7 +23,7 @@ module.exports = grammar({
 			$.return_statement,
 			$.print_statement,
 			$.input_statement,
-			$.function_call,
+			seq($.function_call, ';'),
 			$.assignment_statement,
 			seq($.post_increment_statement, ';')
 
@@ -35,7 +35,7 @@ module.exports = grammar({
 		return_statement: $ => seq('return', field("return_value", optional($._expression)), ';'),
 		print_statement: $ => seq('print', '(', $._expression, ')', ';'),
 		input_statement: $ => seq('input', '(', $.identifier, ')', ';'),
-		function_call: $ => seq($.identifier, '(', optional($.argument_list), ')', ';'),
+		function_call: $ => seq($.identifier, '(', optional($.argument_list), ')'),
 		assignment_statement: $ => seq(field("identifier", $.identifier), '=', $._expression, ';'),
 		post_increment_statement: $ => seq($.identifier, '++'),
 

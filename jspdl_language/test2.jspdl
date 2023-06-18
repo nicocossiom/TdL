@@ -1,11 +1,7 @@
-let int b;
-b=1;
-let string c;
-c = "c";
-
-function main(){
-    let string a;
-    a = "a";
-    print(a);
+function main int(){
+    return 1;
 }
+let int a;
+a = main();
 main();
+print(a);

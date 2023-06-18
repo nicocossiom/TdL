@@ -103,7 +103,8 @@ class Operation(Enum):
     IF_TAG = 13
     WHILE_TRUE = 14
     WHILE_TAG = 15
-    FUNCTION_TAG = 16
+    FUNCTION_DECLARATION_START_TAG = 16
+    FUNCTION_DECLARATION_END_TAG = 17
 
     def __repr__(self) -> str:
         return self.name.replace("Operation.", "")
@@ -444,7 +445,18 @@ def gen_print(q: Quartet) -> str:
             return gen_instr(f"WRINT {find_op(q.op1)}", "WRINT op1")
 
 
-def gen_function_tag(q: Quartet) -> str:
+def gen_function_declaration_end_tag(q: Quartet) -> str:
+    assert q.op_options is not None
+    try:
+        identifier = q.op_options["tag_identifier"]
+        end_tag = f"{identifier}_end"
+        return gen_instr(f"{end_tag}:")
+    except KeyError:
+        raise CodeGenException(
+            "Function_tag operation must have op_options with defined tag_identifier which must correspond to a function_tag")
+
+
+def gen_function_start_tag(q: Quartet) -> str:
     if not q.op_options:
         raise CodeGenException(
             "Function_tag operation must have op_options with defined tag_identifier")
@@ -457,50 +469,53 @@ NOP; NOP to manage recursive functions
 """)
 
 
+def gen_function_end_tag(q: Quartet) -> str:
+    if not q.op_options:
+        raise CodeGenException(
+            "Function_end_tag operation must have op_options with defined tag_identifier")
+    identifier = q.op_options["tag_identifier"]
+
+    return gen_instr(f"{identifier}_end:", f"end of function {identifier} declaration")
+
+
 def gen_function_param(q: Quartet) -> str:
     if not q.op1:
         raise CodeGenException(
             "Parameter operation must have at least one operand")
-    return gen_instr(f"ADD {find_op(q.op1)}, ", "movemos el puntero al siguiente RA") +\
-        gen_instr(f"ADD {find_op(q.op1)}, ", "Nos colocamos en la parte de params de nuestro RA") +\
-        gen_instr(f"MOVE {find_op(q.op1)}, ",
+    if not q.op_options:
+        raise CodeGenException(
+            "Parameter operation must have op_options with defined AC size")
+    access_register_size: int = q.op_options["access_register_size"]
+    return gen_instr(f"ADD {find_op(q.op1)}, IX ", "movemos el puntero al siguiente RA") +\
+        gen_instr(f"ADD {access_register_size}, .A", "Nos colocamos en la parte de params de nuestro RA") +\
+        gen_instr(f"MOVE {find_op(q.op1)},[.A] ",
                   "Pasamos el param a su posicion, la suma anterior incrementa por cada param")
-
-
-# ADD #Tam_RA_llamador, .IX; movemos el puntero al siguiente RA
-# ADD #1, .A; Nos colocamos en la parte de params de nuestro RA
-# MOVE op1, [.A];Pasamos el param a su posicion
-# ;la suma anterior incrementa por cada param
 
 
 def gen_function_return(q: Quartet) -> str:
     ret_val = ""
 
+    if not q.op_options:
+        raise CodeGenException(
+            "Function_return operation must have op_options with defined AC size")
+
     if q.op1:
         if (q.op1.scope == OperandScope.GLOBAL):
             return gen_instr("HALT", "si en el programa principal haces un return, paras de ejecutar")
         # local return from function
-        ret_val += gen_instr("SUB #Tam_RA_p, #X", "X es el tamaño del valor devuelto") + \
-            gen_instr("SUB .A, .IX", "") + \
-            gen_instr(
-                f"MOVE {find_op(q.op1)}, [.A]", "Y es el desplazamiento de op1 en la TS")
-    if q.op_options is None:
-        raise CodeGenException("Function_tag operation must have op_options")
-    identifier = q.op_options["tag_identifier"]
-    try:
-        end_tag = f"{identifier}_end"
-    except KeyError:
-        raise CodeGenException(
-            "Function_tag operation must have op_options with defined tag_identifier which must correspond to a function_tag")
-    ret_val += gen_instrs(f"""
-BR [.IX] ;devuelve el control al llamador
-{end_tag}:
-""")
+        access_register_size: int = q.op_options["access_register_size"]
+        assert q.op1.op_type is not None
+        ret_val += gen_instrs(f""" 
+SUB #{access_register_size}, #{st.size_dict[q.op1.op_type]}  ; X es el tamaño del valor devuelto
+ADD .A, .IX
+MOVE {find_op(q.op1)}, [.A]; Y es el desplazamiento de op1 en la TS
+        """)
+    ret_val += gen_instr("BR [.IX] ;devuelve el control al llamador")
 
     return ret_val
 
 
-def gen_call(q: Quartet) -> str:
+def gen_function_call(q: Quartet) -> str:
     if not q.op_options:
         raise CodeGenException(
             "Function_tag operation must have op_options with defined tag_identifier")
@@ -513,39 +528,35 @@ def gen_call(q: Quartet) -> str:
     except KeyError:
         raise CodeGenException(
             "Function_tag operation must have op_options with defined tag_identifier which must correspond to a function_tag")
-    instr = gen_instrs(
-        f"""
-MOVE #{ret_tag}, #{access_register_size}[.IX]; pongo el EM del llamado
-ADD #{access_register_size}, .IX
-MOVE .A, .IX; recoloco el puntero de pila al llamado
-BR /{function_tag}
+    instr = gen_instr(f"""
+MOVE #{ret_tag}, #{access_register_size}[.IX]; coloco la dirección del salto de retorno en el EM del RA de la funcion llamada 
+ADD #{access_register_size}, .IX ; avanzo el puntero de pila al RA de la funcion llamada
+MOVE .A, .IX; recoloco el puntero de pila al comienzo del resgistro de activacion al llamado
+BR /{function_tag}; salto al codigo de la funcion llamada
+    """)
+
+    if q.op_options["ret_type"] != JSPDLType.VOID:
+        # hay valor de retorno
+        ret_type = q.op_options["ret_type"]
+        instr += gen_instrs(f""" 
+{ret_tag}:  ; etiqueta de retorno
+SUB #{access_register_size}, #{st.size_dict[ret_type]}; desplazamiento del valor de retorno en el RA == direccion del valor de retorno
+ADD .A, .IX ; el acumulador ahora contiene la dirección del valor de retorno 
+MOVE [.A], .R9; R9 contiene la dirección del valor de retorno 
+
+
+SUB .IX, #{ret_tag}; en el acumulador tenemos el comienzo de la pila de la funcion llamadora 
+MOVE .A, .IX;recolocamos el puntero de pila en el EM de la funcion llamadora
+
+MOVE .R9, #Y[.IX] se copia la direccion del valor de retorno, Y es el desplazamiento de la temporal en la TS
+""")
+    else:
+        instr += gen_instrs(f"""
 {ret_tag}: 
 SUB .IX, #{access_register_size} 
 MOVE .A, .IX ; recolocamos el puntero de pila en el EM del llamado
     """)
-    assert isinstance(
-        instr, str)  # para que no de por saco python con el unused
-    if q.op_options["ret_type"] != JSPDLType.VOID:
-        instr = gen_instrs(
-            f""" 
-MOVE #{ret_tag}, #{access_register_size}[.IX]; pongo el EM del llamado
-ADD #{access_register_size}, .IX
-MOVE .A, .IX ; recoloco el puntero de pila al llamado
-BR /{function_tag}
-
-{ret_tag}: 
-SUB #{access_register_size}, #X; X es el tamaño del valor devuelto
-ADD .A, .IX ; contiene la dirección del VD 
-MOVE [.A], .R9; R9 contiene la dirección del VD 
-
-
-SUB .IX, #{ret_tag} 
-MOVE .A, .IX;recolocamos el puntero de pila en el EM del llamador
-
-MOVE .R9, #Y[.IX]; se copia el valor de retorno en la variable temporal que corresponda, Y es el desplazamiento de la temporal en la TS
-""")
     return instr
-
 
 code_gen_dict: dict[Operation, Callable[[Quartet], str]] = {
     Operation.ADD: gen_add,
@@ -555,7 +566,7 @@ code_gen_dict: dict[Operation, Callable[[Quartet], str]] = {
     Operation.GOTO:  gen_goto,
     Operation.PARAM:  gen_function_param,
     Operation.RETURN:  gen_function_return,
-    Operation.CALL:  gen_call,
+    Operation.CALL:  gen_function_call,
     Operation.INC:  gen_inc,
     Operation.PRINT:  gen_print,
     Operation.INPUT:  gen_input,
@@ -563,7 +574,8 @@ code_gen_dict: dict[Operation, Callable[[Quartet], str]] = {
     Operation.IF_TAG:  gen_if_tag,
     Operation.WHILE_TRUE:  gen_while_true_goto,
     Operation.WHILE_TAG:  gen_while_tag,
-    Operation.FUNCTION_TAG:  gen_function_tag,
+    Operation.FUNCTION_DECLARATION_START_TAG:  gen_function_start_tag,
+    Operation.FUNCTION_DECLARATION_END_TAG:  gen_function_end_tag,
 }
 
 

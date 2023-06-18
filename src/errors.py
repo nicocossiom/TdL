@@ -47,6 +47,23 @@ class UndeclaredFunctionCallError(Error):
         return f"{super().__repr__()}: function '{unwrap_text(self.node.text)}' being called but is not declared in any scope"
 
 
+class NoValidReturnInFunctionBody(Error):
+    def __init__(self, identifier_node: Node):
+        super().__init__(identifier_node)
+
+    def __repr__(self):
+        return f"{super().__repr__()}: function '{unwrap_text(self.node.text)}' has no valid return statement in its body"
+
+
+class UncallableError(Error):
+    def __init__(self, identifier_node: Node, actual_type: JSPDLType):
+        super().__init__(identifier_node)
+        self.actual_type = actual_type
+
+    def __repr__(self):
+        return f"{super().__repr__()}: '{unwrap_text(self.node.text)}' is being called as a function but is not callable as it is of type {self.actual_type}"
+
+
 class ReturnTypeMismatchError(Error):
     from symbol_table import FnEntry
 
@@ -56,7 +73,7 @@ class ReturnTypeMismatchError(Error):
         self.actual_type = actual_type
 
     def __repr__(self):
-        return f"{super().__repr__()}: expected return type for {self.fn.function_name} {self.fn.return_type} but got {self.actual_type}"
+        return f"{super().__repr__()}: expected return type '{self.fn.return_type}' for function '{self.fn.function_name}' but got type '{self.actual_type}' instead"
 
 
 class CallWithInvalidArgumentsError(Error):
