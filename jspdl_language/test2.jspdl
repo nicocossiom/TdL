@@ -1,32 +1,6 @@
-let int a;
-a = 0;
-let boolean b;
-b = true;
+function hola(){
+    print("hola");
+}
 
-let int c;
-c = 0;
-let boolean d;
-d = true;
-
-do{
-    print("a = ");
-    print(a);
-    print("\n");
-    a++;
-    if(a==3) b=false;
-    do{
-        print("c = ");
-        print(c);
-        print("\n");
-        if (c == 5){
-            print("c es 5");
-            d = false; 
-        }
-        c++;
-    }while(d);
-    print("d = ");
-    print(d);
-    print("\n");
-}while(b);
-print("b = ");
-print(b);
+hola();
+print("sale de la funcion");

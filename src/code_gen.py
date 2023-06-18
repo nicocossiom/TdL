@@ -1,6 +1,6 @@
 import codecs
 from enum import Enum
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 
 import symbol_table as st
 from symbol_table import JSPDLType
@@ -13,6 +13,7 @@ temporal_counter = 0
 is_in_global_scope = True
 if_tag_counter = 0
 while_tag_counter = 0
+functions_tag_counters: dict[str, int] = {}
 
 assembly = " "
 
@@ -161,7 +162,7 @@ c3d_file = open("out.3ic", "w")
 c3d_queue: list[str] = []
 # list of [et DATA "someliteralstring" ... ] to be generated before
 literals_queue: list[str] = []
-
+function_queue: list[Quartet] = []
 RA_stack: list[int] = []
 
 
@@ -213,13 +214,17 @@ def gen_code():
     assembly += """
                         HALT
 """
+    for fn in function_queue:
+        assembly += code_gen_dict[fn.op](fn)
     assembly += "\n".join(literals_queue)  # add literals to assembly
     if static_memory_size > 0:
-        assembly += f"""
-        static_memory_start:    RES {static_memory_size} ; reserve {static_memory_size} memory addresses for global variables
-        """
-    assembly += """
-                        END
+        assembly += "static_memory_start:"
+        assembly += gen_instrs(
+            f"""
+RES {static_memory_size}{" " }; reserve {static_memory_size} memory addresses for global variables
+        """)
+    assembly += gen_instr("END", "end of program")
+    assembly += """                
 ;----------------------------------------------------------------------------------------
     """
     print(f"Assembly code:{assembly}")
@@ -251,6 +256,10 @@ def gen_instrs(ins: str) -> str:
     instrs = ins.split("\n")
     instrs_formatted = ""
     for instr in instrs:
+        if ":" in instr:
+            # its a label
+            instrs_formatted += f"{instr}\n"
+            continue
         instr_split = instr.split(";")
         comment_padding = " " * \
             (comment_column_start - len(instr_split[0]) - len(padding))
@@ -385,9 +394,9 @@ def gen_if_tag(q: Quartet) -> str:
 
 def gen_while_true_goto(q: Quartet) -> str:
     if q.op_options is None:
-        raise CodeGenException(if_error_msg)
+        raise CodeGenException(while_error_message)
     if q.op_options.get("tag") is None:
-        raise CodeGenException(if_error_msg)
+        raise CodeGenException(while_error_message)
     if not q.op1:
         raise CodeGenException(
             "While_True_Goto operation must recieve an operand")
@@ -398,11 +407,14 @@ def gen_while_true_goto(q: Quartet) -> str:
     return ret_val
 
 
+while_error_message = "While operation must have at least one operand and a result"
+
+
 def gen_while_tag(q: Quartet) -> str:
     if q.op_options is None:
-        raise CodeGenException(if_error_msg)
+        raise CodeGenException(while_error_message)
     if q.op_options.get("tag") is None:
-        raise CodeGenException(if_error_msg)
+        raise CodeGenException(while_error_message)
     given_tag_counter: int = q.op_options["tag"]
 
     ret_val = f"while_tag{given_tag_counter}:\n"
@@ -439,11 +451,22 @@ def gen_print(q: Quartet) -> str:
 
 
 def gen_function_tag(q: Quartet) -> str:
-    if not q.op1:
+    if not q.op_options:
         raise CodeGenException(
-            "Function_tag operation must have at least one operand")
-
-    return f"{q.op1.value}:\n"
+            "Function_tag operation must have op_options with defined tag_identifier")
+    identifier = q.op_options["tag_identifier"]
+    given_tag_counter = 0
+    try:
+        given_tag_counter = functions_tag_counters[identifier]
+        functions_tag_counters[identifier] += 1
+    except KeyError:
+        functions_tag_counters[identifier] = 1
+        given_tag_counter = functions_tag_counters[identifier]
+    return gen_instrs(f"""
+BR ${identifier}_{given_tag_counter}_end ; jump to the end of the function to avoid calling it 
+{identifier}_{given_tag_counter}:
+NOP; NOP to manage recursive functions
+""")
 
 
 def gen_function_param(q: Quartet) -> str:
@@ -473,44 +496,65 @@ def gen_function_return(q: Quartet) -> str:
             gen_instr("SUB .A, .IX", "") + \
             gen_instr(
                 f"MOVE {find_op(q.op1)}, [.A]", "Y es el desplazamiento de op1 en la TS")
-    ret_val += gen_instr("BR [.IX]", "devuelve el control al llamador")
+    if q.op_options is None:
+        raise CodeGenException("Function_tag operation must have op_options")
+    identifier = q.op_options["tag_identifier"]
+    try:
+        end_tag = f"{identifier}_{functions_tag_counters[identifier]}_end"
+    except KeyError:
+        raise CodeGenException(
+            "Function_tag operation must have op_options with defined tag_identifier which must correspond to a function_tag")
+    ret_val += gen_instrs(f"""
+BR [.IX] ;devuelve el control al llamador
+{end_tag}:
+""")
 
     return ret_val
 
 
 def gen_call(q: Quartet) -> str:
-    if q.op1 is None:
-        raise CodeGenException("Call operation must have at least one operand")
-    function_tag = q.op1.value
-    assert function_tag is not None
+    if not q.op_options:
+        raise CodeGenException(
+            "Function_tag operation must have op_options with defined tag_identifier")
+    identifier = q.op_options["tag_identifier"]
+    access_register_size: int = q.op_options["access_register_size"]
+    try:
+        function_tag = f"{identifier}_{functions_tag_counters[identifier]}"
+        ret_tag = f"ret_dir_{identifier}_{functions_tag_counters[identifier]}"
+    except KeyError:
+        raise CodeGenException(
+            "Function_tag operation must have op_options with defined tag_identifier which must correspond to a function_tag")
     instr = gen_instrs(
-        f""" llamadas sin resultado
-MOVE #dir_ret1, #Tam_RA_llamador [.IX];pongo el EM del llamado
-ADD #Tam_RA_llamador, .IX
-MOVE .A, .IX;recoloco el puntero de pila al llamado
-BR /{function_tag.value}
-dir_ret1: SUB .IX, #Tam_RA_llamador 
-MOVE .A, .IX;recolocamos el puntero de pila en el EM del llamado
+        f"""
+MOVE #{ret_tag}, #{access_register_size}[.IX]; pongo el EM del llamado
+ADD #{access_register_size}, .IX
+MOVE .A, .IX; recoloco el puntero de pila al llamado
+BR /{function_tag}
+{ret_tag}: 
+SUB .IX, #{access_register_size} 
+MOVE .A, .IX ; recolocamos el puntero de pila en el EM del llamado
     """)
     assert isinstance(
         instr, str)  # para que no de por saco python con el unused
-    instr = gen_instr(
-        f""" llamadas con resultado
-    Move #dir_ret1, #Tam_RA_llamador [.IX];pongo el EM del llamado
-ADD #Tam_RA_llamador, .IX
-MOVE .A, .IX;recoloco el puntero de pila al llamado<
-BR {function_tag.value}
+    if q.op_options["ret_type"] != JSPDLType.VOID:
+        instr = gen_instrs(
+            f""" 
+MOVE #{ret_tag}, #{access_register_size}[.IX]; pongo el EM del llamado
+ADD #{access_register_size}, .IX
+MOVE .A, .IX ; recoloco el puntero de pila al llamado
+BR /{function_tag}
 
-dir_ret1: SUB #Tam_RA_p, #X; X es el tamaño del valor devuelto
+{ret_tag}: 
+SUB #{access_register_size}, #X; X es el tamaño del valor devuelto
 ADD .A, .IX ; contiene la dirección del VD 
 MOVE [.A], .R9; R9 contiene la dirección del VD 
 
 
-SUB .IX, #Tam_RA_llamador 
+SUB .IX, #{ret_tag} 
 MOVE .A, .IX;recolocamos el puntero de pila en el EM del llamador
 
 MOVE .R9, #Y[.IX]; se copia el valor de retorno en la variable temporal que corresponda, Y es el desplazamiento de la temporal en la TS
-    """)
+""")
     return instr
 
 

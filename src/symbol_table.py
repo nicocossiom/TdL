@@ -1,6 +1,6 @@
 from enum import Enum
 # Add Type argument to fix the error
-from typing import Dict, List, NamedTuple, Type, Union
+from typing import Dict, List, NamedTuple, Optional, Type, Union
 
 from tree_sitter import Node
 
@@ -68,13 +68,19 @@ class FnEntry(Entry):
         super().__init__(JSPDLType.FUNCTION, node)
         self.return_type = return_type
         self.arguments: List[Argument] = arguments
+        self.arg_size = 0
+        for arg in arguments:
+            self.arg_size += size_dict[arg.type]
         self.function_name = unwrap_text(node.named_children[0].text)
 
 
 class SymbolTable:
-    def __init__(self) -> None:
+    def __init__(self, st_function_parameters_size: Optional[int] = None) -> None:
         self.entries: Dict[str, Entry] = {}
         self.current_offset = 0
+        self.access_register_size = 0 \
+            if st_function_parameters_size is None \
+            else st_function_parameters_size + 1  # EM
 
     def __contains__(self, key: str) -> bool:
         return key in self.entries
@@ -86,6 +92,7 @@ class SymbolTable:
         if isinstance(value, VarEntry):
             value.offset = self.current_offset
             self.current_offset += value.size
+            self.access_register_size += value.size
         self.entries[key] = value
 
     def __repr__(self) -> str:

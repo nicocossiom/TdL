@@ -25,8 +25,11 @@ def get_scope(identifier: str) -> cg.OperandScope:
             return cg.OperandScope.GLOBAL
         else:
             return cg.OperandScope.LOCAL
-    raise Exception(
-        "Identifier not found in any symbol table, should not happen")
+    elif identifier in st.global_symbol_table:
+        return cg.OperandScope.GLOBAL
+    else:
+        raise Exception(
+            "Identifier not found in any symbol table, should not happen")
 
 
 def ast_type_check_tree(tree: Tree):
@@ -415,37 +418,46 @@ def print_statement(node: Node):
 def return_statement(node: Node) -> TypeCheckResult:
     query = language.query("(return_statement ( value )? @value)")
     captures = query.captures(node)
+    global current_fn
+    options = {}
+    if current_fn is not None:
+        options = {"tag_identifier": current_fn.function_name}
     if len(captures) == 0:
         # no return value
-        if st.current_symbol_table == st.global_symbol_table:
-            # return from global
-            cg.quartet_queue.append(
-                Quartet(
-                    Operation.RETURN,
-                    Operand(scope=cg.OperandScope.GLOBAL)
-                )
+        scope = cg.OperandScope.GLOBAL \
+            if st.current_symbol_table == st.global_symbol_table \
+            else cg.OperandScope.LOCAL
+
+        cg.quartet_queue.append(
+            Quartet(
+                Operation.RETURN,
+                Operand(scope=scope),
+                op_options={}
             )
+        )
     if st.current_symbol_table == st.global_symbol_table:
-        mainFn = st.global_symbol_table["main"]
-        assert isinstance(mainFn, st.FnEntry)
+        # returning value from global scope not allowed
+        main_fn = st.global_symbol_table["main"]
+        assert isinstance(main_fn, st.FnEntry)
         print_error(ReturnTypeMismatchError(
-            node, mainFn, JSPDLType.VOID))
+            node, main_fn, JSPDLType.VOID))
         return TypeCheckResult(JSPDLType.INVALID)
     value_checked: TypeCheckResult = rule_functions[captures[0][0].type](
         captures[0][0])
-    global current_fn
-    assert current_fn is not None
-    if value_checked.type != current_fn.return_type:
+    if current_fn is not None and value_checked.type != current_fn.return_type:
         print_error(ReturnTypeMismatchError(
             node, current_fn, value_checked.type))
         return TypeCheckResult(JSPDLType.INVALID)
+
     cg.quartet_queue.append(
         Quartet(
             Operation.RETURN,
-            Operand(value=value_checked.value, offset=value_checked.offset)
+            Operand(value=value_checked.value, offset=value_checked.offset),
+            op_options=options
         )
     )
-    return TypeCheckResult(JSPDLType.VOID)  # no es void pero bueno
+    # no es void pero bueno
+    return TypeCheckResult(JSPDLType.VOID if len(captures) == 0 else value_checked.type)
 
 
 def function_declaration(node: Node) -> TypeCheckResult:
@@ -468,31 +480,33 @@ def function_declaration(node: Node) -> TypeCheckResult:
         print_error(PreDeclarationError(
             capt_dict["identifier"], st.global_symbol_table[identifier].node))
         return TypeCheckResult(JSPDLType.INVALID)
-    ret_type = JSPDLType(capt_dict["type"]
-                         ) if "type" in capt_dict else JSPDLType.VOID
+    ret_type = JSPDLType(unwrap_text(capt_dict["type"].text)) if capt_dict.get(
+        "type") is not None else JSPDLType.VOID
     args = argument_declaration_list(
         capt_dict["argument_declaration_list"]) if "argument_declaration_list" in capt_dict else []
+
     cg.quartet_queue.append(
         Quartet(
             Operation.FUNCTION_TAG,
-            Operand(value=cg.OpVal(value=identifier),
-                    op_type=JSPDLType.FUNCTION),
+            op_options={"tag_identifier": identifier}
         )
     )
 
+    global current_fn
+    current_fn = FnEntry(ret_type, args, node)
+    st.global_symbol_table[identifier] = current_fn
+    st.current_symbol_table = st.SymbolTable()
     block_checked = rule_functions[capt_dict["block"].type](capt_dict["block"])
     if block_checked.type == JSPDLType.INVALID:
         return TypeCheckResult(JSPDLType.INVALID)
     st.global_symbol_table[identifier] = FnEntry(ret_type, args, node)
-    # cg.quartet_queue.append(
-    #     Quartet(
-    #         Operation.,
-    #     )
-    #         Operand()
-    # )
-    global current_fn
-    current_fn = FnEntry(ret_type, args, node)
-    st.global_symbol_table[identifier] = current_fn
+    # manul return just in case body of function does not have return statement
+    cg.quartet_queue.append(
+        Quartet(
+            Operation.RETURN,
+            op_options={"tag_identifier": identifier}
+        )
+    )
     return TypeCheckResult(type=JSPDLType.VOID, identifier=identifier)
 
 
@@ -539,32 +553,42 @@ def function_call(node: Node) -> TypeCheckResult:
         "(function_call ( identifier ) @identifier ( argument_list)? @argument_list)")
     captures = query.captures(node)
     identifier = unwrap_text(captures[0][0].text)
-    if identifier not in st.current_symbol_table or identifier not in st.global_symbol_table:
+    if identifier not in st.global_symbol_table:
         print_error(UndeclaredFunctionCallError(captures[0][0]))
         return TypeCheckResult(JSPDLType.INVALID)
-    fn = st.current_symbol_table[identifier] if identifier in st.current_symbol_table else st.global_symbol_table[identifier]
+    fn = st.global_symbol_table[identifier]
     assert isinstance(fn, FnEntry)
-    fn_args = [arg.type for arg in fn.arguments]
-    args = argument_list(captures[1][0])
-    if args is None:
-        print_error(CallWithInvalidArgumentsError(
-            node, fn_args, [JSPDLType.INVALID]))
-        return TypeCheckResult(JSPDLType.INVALID)
-    args_types = [arg.type for arg in args]
-    if args_types != fn_args:
-        print_error(CallWithInvalidArgumentsError(node, fn_args, args_types))
-        return TypeCheckResult(JSPDLType.INVALID)
-    for arg in args:
-        cg.quartet_queue.append(
-            Quartet(
-                Operation.PARAM,
-                Operand(value=arg.value, offset=arg.offset,
-                        scope=arg.scope, op_type=arg.type)
+    if len(captures) == 2:
+        # function call with arguments
+        fn_args = [arg.type for arg in fn.arguments]
+        args = argument_list(captures[1][0])
+        if args is None:
+            print_error(CallWithInvalidArgumentsError(
+                node, fn_args, [JSPDLType.INVALID]))
+            return TypeCheckResult(JSPDLType.INVALID)
+        args_types = [arg.type for arg in args]
+        if args_types != fn_args:
+            print_error(CallWithInvalidArgumentsError(
+                node, fn_args, args_types))
+            return TypeCheckResult(JSPDLType.INVALID)
+        for arg in args:
+            cg.quartet_queue.append(
+                Quartet(
+                    Operation.PARAM,
+                    Operand(value=arg.value, offset=arg.offset,
+                            scope=arg.scope, op_type=arg.type)
+                )
             )
-        )
+
     cg.quartet_queue.append(
-        Quartet(Operation.CALL, Operand(
-            value=cg.OpVal(value=f"{identifier}"), op_type=JSPDLType.FUNCTION))
+        Quartet(
+            Operation.CALL,
+            op_options={
+                "tag_identifier": identifier,
+                "access_register_size": st.current_symbol_table.access_register_size + fn.arg_size,
+                "ret_type": fn.return_type
+            }
+        )
     )
     return TypeCheckResult(fn.return_type)
 
