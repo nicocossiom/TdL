@@ -234,9 +234,15 @@ def gen_instr_and_add_to_assembly(ins: str, comment: str = "") -> None:
     assembly += gen_instr(ins, comment)
 
 
+# the column where the comment starts
+comment_column_start = 69
+
+
 def gen_instr(ins: str, comment: str = "") -> str:
     padding = " " * 24
-    return f"{padding}{ins}\t\t\t;{comment}\n"
+    comment = f"; {comment}" if comment else ""
+    comment_padding = " " * (comment_column_start - len(ins) - len(padding))
+    return f"{padding}{ins}{comment_padding}{comment}\n"
 
 
 def gen_instrs(ins: str) -> str:
@@ -245,8 +251,12 @@ def gen_instrs(ins: str) -> str:
     instrs = ins.split("\n")
     instrs_formatted = ""
     for instr in instrs:
-        comment = instr.split(";")[1]
-        instrs_formatted += f"{padding}{instr}\t\t\t;{comment}\n"
+        instr_split = instr.split(";")
+        comment_padding = " " * \
+            (comment_column_start - len(instr_split[0]) - len(padding))
+        comment = f"; {instr_split[1]}" if len(
+            instr_split) == 2 else ""
+        instrs_formatted += f"{padding}{instr_split[0]}{comment_padding}{comment}\n"
     return instrs_formatted
 
 
@@ -472,12 +482,13 @@ def gen_call(q: Quartet) -> str:
     if q.op1 is None:
         raise CodeGenException("Call operation must have at least one operand")
     function_tag = q.op1.value
+    assert function_tag is not None
     instr = gen_instrs(
         f""" llamadas sin resultado
 MOVE #dir_ret1, #Tam_RA_llamador [.IX];pongo el EM del llamado
 ADD #Tam_RA_llamador, .IX
 MOVE .A, .IX;recoloco el puntero de pila al llamado
-BR /{function_tag}
+BR /{function_tag.value}
 dir_ret1: SUB .IX, #Tam_RA_llamador 
 MOVE .A, .IX;recolocamos el puntero de pila en el EM del llamado
     """)
@@ -488,7 +499,7 @@ MOVE .A, .IX;recolocamos el puntero de pila en el EM del llamado
     Move #dir_ret1, #Tam_RA_llamador [.IX];pongo el EM del llamado
 ADD #Tam_RA_llamador, .IX
 MOVE .A, .IX;recoloco el puntero de pila al llamado<
-BR {function_tag}
+BR {function_tag.value}
 
 dir_ret1: SUB #Tam_RA_p, #X; X es el tamaño del valor devuelto
 ADD .A, .IX ; contiene la dirección del VD 
