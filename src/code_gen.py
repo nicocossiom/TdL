@@ -458,16 +458,10 @@ def gen_function_tag(q: Quartet) -> str:
         raise CodeGenException(
             "Function_tag operation must have op_options with defined tag_identifier")
     identifier = q.op_options["tag_identifier"]
-    given_tag_counter = 0
-    try:
-        given_tag_counter = functions_tag_counters[identifier]
-        functions_tag_counters[identifier] += 1
-    except KeyError:
-        functions_tag_counters[identifier] = 1
-        given_tag_counter = functions_tag_counters[identifier]
+
     return gen_instrs(f"""
-BR ${identifier}_{given_tag_counter}_end ; jump to the end of the function to avoid calling it 
-{identifier}_{given_tag_counter}:
+BR ${identifier}_end ; jump to the end of the function to avoid calling it 
+{identifier}:
 NOP; NOP to manage recursive functions
 """)
 
@@ -503,7 +497,7 @@ def gen_function_return(q: Quartet) -> str:
         raise CodeGenException("Function_tag operation must have op_options")
     identifier = q.op_options["tag_identifier"]
     try:
-        end_tag = f"{identifier}_{functions_tag_counters[identifier]}_end"
+        end_tag = f"{identifier}_end"
     except KeyError:
         raise CodeGenException(
             "Function_tag operation must have op_options with defined tag_identifier which must correspond to a function_tag")
@@ -521,9 +515,10 @@ def gen_call(q: Quartet) -> str:
             "Function_tag operation must have op_options with defined tag_identifier")
     identifier = q.op_options["tag_identifier"]
     access_register_size: int = q.op_options["access_register_size"]
+    tag_count: int = q.op_options["tag_count"]
     try:
-        function_tag = f"{identifier}_{functions_tag_counters[identifier]}"
-        ret_tag = f"ret_dir_{identifier}_{functions_tag_counters[identifier]}"
+        function_tag = f"{identifier}"
+        ret_tag = f"ret_dir_{identifier}_{tag_count}"
     except KeyError:
         raise CodeGenException(
             "Function_tag operation must have op_options with defined tag_identifier which must correspond to a function_tag")

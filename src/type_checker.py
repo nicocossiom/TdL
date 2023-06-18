@@ -432,7 +432,7 @@ def return_statement(node: Node) -> TypeCheckResult:
             Quartet(
                 Operation.RETURN,
                 Operand(scope=scope),
-                op_options={}
+                op_options=options
             )
         )
     if st.current_symbol_table == st.global_symbol_table:
@@ -472,7 +472,6 @@ def function_declaration(node: Node) -> TypeCheckResult:
     )
     """
     )
-
     captures = query.captures(node)
     capt_dict = {capture[1]: capture[0] for capture in captures}
     identifier = unwrap_text(capt_dict["identifier"].text)
@@ -484,23 +483,26 @@ def function_declaration(node: Node) -> TypeCheckResult:
         "type") is not None else JSPDLType.VOID
     args = argument_declaration_list(
         capt_dict["argument_declaration_list"]) if "argument_declaration_list" in capt_dict else []
-
+    # manul return just in case body of function does not have return statement
+    cg.functions_tag_counters[identifier] = 0
     cg.quartet_queue.append(
         Quartet(
             Operation.FUNCTION_TAG,
             op_options={"tag_identifier": identifier}
         )
     )
-
     global current_fn
     current_fn = FnEntry(ret_type, args, node)
     st.global_symbol_table[identifier] = current_fn
-    st.current_symbol_table = st.SymbolTable()
+    st.current_symbol_table = st.SymbolTable(
+        st_function_parameters_size=sum(
+            [st.size_dict[arg.type] for arg in args])
+    )
     block_checked = rule_functions[capt_dict["block"].type](capt_dict["block"])
     if block_checked.type == JSPDLType.INVALID:
         return TypeCheckResult(JSPDLType.INVALID)
     st.global_symbol_table[identifier] = FnEntry(ret_type, args, node)
-    # manul return just in case body of function does not have return statement
+
     cg.quartet_queue.append(
         Quartet(
             Operation.RETURN,
@@ -586,10 +588,12 @@ def function_call(node: Node) -> TypeCheckResult:
             op_options={
                 "tag_identifier": identifier,
                 "access_register_size": st.current_symbol_table.access_register_size + fn.arg_size,
-                "ret_type": fn.return_type
+                "ret_type": fn.return_type,
+                "tag_count": cg.functions_tag_counters[identifier]
             }
         )
     )
+    cg.functions_tag_counters[identifier] += 1
     return TypeCheckResult(fn.return_type)
 
 
