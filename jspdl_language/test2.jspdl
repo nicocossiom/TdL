@@ -18,7 +18,10 @@ do{
         print("c = ");
         print(c);
         print("\n");
-        if(c==3) d=false;
+        if (c == 5){
+            print("c es 5");
+            d = false; 
+        }
         c++;
     }while(d);
     print("d = ");

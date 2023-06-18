@@ -542,13 +542,6 @@ def function_call(node: Node) -> TypeCheckResult:
     if identifier not in st.current_symbol_table or identifier not in st.global_symbol_table:
         print_error(UndeclaredFunctionCallError(captures[0][0]))
         return TypeCheckResult(JSPDLType.INVALID)
-    ###
-    # st.current_symbol_table = SymbolTable()
-    # global current_fn
-    # current_fn = FnEntry(ret_type, args, node)
-    # st.current_symbol_table = st.global_symbol_table
-    ###
-
     fn = st.current_symbol_table[identifier] if identifier in st.current_symbol_table else st.global_symbol_table[identifier]
     assert isinstance(fn, FnEntry)
     fn_args = [arg.type for arg in fn.arguments]
@@ -557,20 +550,33 @@ def function_call(node: Node) -> TypeCheckResult:
         print_error(CallWithInvalidArgumentsError(
             node, fn_args, [JSPDLType.INVALID]))
         return TypeCheckResult(JSPDLType.INVALID)
-    if args != fn_args:
-        print_error(CallWithInvalidArgumentsError(node, fn_args, args))
+    args_types = [arg.type for arg in args]
+    if args_types != fn_args:
+        print_error(CallWithInvalidArgumentsError(node, fn_args, args_types))
         return TypeCheckResult(JSPDLType.INVALID)
+    for arg in args:
+        cg.quartet_queue.append(
+            Quartet(
+                Operation.PARAM,
+                Operand(value=arg.value, offset=arg.offset,
+                        scope=arg.scope, op_type=arg.type)
+            )
+        )
+    cg.quartet_queue.append(
+        Quartet(Operation.CALL, Operand(
+            value=cg.OpVal(value=f"{identifier}"), op_type=JSPDLType.FUNCTION))
+    )
     return TypeCheckResult(fn.return_type)
 
 
-def argument_list(node: Node) -> List[JSPDLType] | None:
+def argument_list(node: Node) -> List[TypeCheckResult] | None:
     # TODO test
-    arg_list: list[JSPDLType] = []
+    arg_list: list[TypeCheckResult] = []
     for val in node.named_children:
         val_checked = rule_functions[val.type](val)
         if val_checked.type == JSPDLType.INVALID:
             return None
-        arg_list.append(val_checked.type)
+        arg_list.append(val_checked)
     return arg_list
 
 
@@ -649,22 +655,3 @@ current_module = inspect.getmodule(lambda: None)
 # Retrieve all functions in the current module
 rule_functions = {name: func for name, func in inspect.getmembers(
     current_module, inspect.isfunction)}
-
-# rule_functions: dict[str, Callable[[Node], TypeCheckResult | list[Argument] | List[JSPDLType] | None]] = {
-#     "let_statement": let_statement,
-#     "assignment_statement": assignment_statement,
-#     "value": value,
-#     "or_expression": or_expression,
-#     "equality_expression": equality_expression,
-#     "addition_expression": addition_expression,
-#     "post_increment_statement": post_increment_statement,
-#     "input_statement": input_statement,
-#     "print_statement": print_statement,
-#     "return_statement": return_statement,
-#     "function_call": function_call,
-#     "argument_listt": argument_list,
-#     "function_declaration": function_declaration,
-#     "block": block,
-#     "argument_declaration_list": argument_declaration_list,
-#     "argument_declaration": argument_declaration,
-# }

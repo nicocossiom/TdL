@@ -239,6 +239,17 @@ def gen_instr(ins: str, comment: str = "") -> str:
     return f"{padding}{ins}\t\t\t;{comment}\n"
 
 
+def gen_instrs(ins: str) -> str:
+    padding = " " * 24
+    # separate the ins per new line into a list
+    instrs = ins.split("\n")
+    instrs_formatted = ""
+    for instr in instrs:
+        comment = instr.split(";")[1]
+        instrs_formatted += f"{padding}{instr}\t\t\t;{comment}\n"
+    return instrs_formatted
+
+
 def gen_add(q: Quartet) -> str:
     if not q.op1 or not q.op2 or not q.res:
         raise CodeGenException(
@@ -370,7 +381,7 @@ def gen_while_true_goto(q: Quartet) -> str:
     if not q.op1:
         raise CodeGenException(
             "While_True_Goto operation must recieve an operand")
-    given_tag_counter: int = q.op_options["tag"] 
+    given_tag_counter: int = q.op_options["tag"]
     ret_val = gen_instr(f"CMP {find_op(q.op1)}, #1", "compare while condition, if cmp 1 means true") + \
         gen_instr(f"BZ $while_tag{given_tag_counter}",
                   "if while condition is true, jump at the beginning of the block")
@@ -383,7 +394,7 @@ def gen_while_tag(q: Quartet) -> str:
     if q.op_options.get("tag") is None:
         raise CodeGenException(if_error_msg)
     given_tag_counter: int = q.op_options["tag"]
-    
+
     ret_val = f"while_tag{given_tag_counter}:\n"
     ret_val += gen_instr("NOP", "NOP to avoid two while consecutive labels")
 
@@ -458,7 +469,38 @@ def gen_function_return(q: Quartet) -> str:
 
 
 def gen_call(q: Quartet) -> str:
-    return ""
+    if q.op1 is None:
+        raise CodeGenException("Call operation must have at least one operand")
+    function_tag = q.op1.value
+    instr = gen_instrs(
+        f""" llamadas sin resultado
+MOVE #dir_ret1, #Tam_RA_llamador [.IX];pongo el EM del llamado
+ADD #Tam_RA_llamador, .IX
+MOVE .A, .IX;recoloco el puntero de pila al llamado
+BR /{function_tag}
+dir_ret1: SUB .IX, #Tam_RA_llamador 
+MOVE .A, .IX;recolocamos el puntero de pila en el EM del llamado
+    """)
+    assert isinstance(
+        instr, str)  # para que no de por saco python con el unused
+    instr = gen_instr(
+        f""" llamadas con resultado
+    Move #dir_ret1, #Tam_RA_llamador [.IX];pongo el EM del llamado
+ADD #Tam_RA_llamador, .IX
+MOVE .A, .IX;recoloco el puntero de pila al llamado<
+BR {function_tag}
+
+dir_ret1: SUB #Tam_RA_p, #X; X es el tamaño del valor devuelto
+ADD .A, .IX ; contiene la dirección del VD 
+MOVE [.A], .R9; R9 contiene la dirección del VD 
+
+
+SUB .IX, #Tam_RA_llamador 
+MOVE .A, .IX;recolocamos el puntero de pila en el EM del llamador
+
+MOVE .R9, #Y[.IX]; se copia el valor de retorno en la variable temporal que corresponda, Y es el desplazamiento de la temporal en la TS
+    """)
+    return instr
 
 
 code_gen_dict: dict[Operation, Callable[[Quartet], str]] = {
