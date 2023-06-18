@@ -6,7 +6,6 @@ import symbol_table as st
 from symbol_table import JSPDLType
 
 static_memory_size = 0
-static_memory_current_offset = 0
 
 temporal_counter = 0
 
@@ -191,7 +190,7 @@ def find_op(o: Operand) -> str:
 def gen_code():
     # static memory = global variables = local variables of main function
     global assembly
-    static_memory_size = st.global_symbol_table.current_offset
+    static_memory_size = st.global_symbol_table.access_register_size
 
     print("3Instruction code generation:")
     print("------------------------------")
@@ -309,54 +308,46 @@ def gen_equals(q: Quartet) -> str:
 
 
 def gen_assign(q: Quartet) -> str:
-    global static_memory_current_offset, assembly
+    global assembly
+    # op1 es la variable es a la que se le asigna
+    # res es el valor que se le asigna, que viene de otra variable o de una constante
     if not q.op1 or not q.res:
         raise CodeGenException(
             "Assign operation must have at least one operand and a result")
     if q.op1.op_type == JSPDLType.STRING:
         # convert the string to a list of ascii codes and move them to memory
-        if q.op1.scope == OperandScope.LOCAL:
-            # convert the string to a list of ascii codes and move them to memory
-            assert q.op1.value is not None
-            assert q.op1.value.value is not None
-            assert isinstance(q.op1.value.value, str)
-            assert q.op1.offset is not None
-
-        if q.op1.scope == OperandScope.GLOBAL:
-            assembly = ""
-            if (q.res.offset is None):
-                assert q.op1.offset is not None
-                assert q.res.value is not None
-                assert q.res.value.rep is not None
-                assert q.res.value.rep.rep_value is not None
-                assert isinstance(q.res.value.rep.rep_value, str)
-                ascii_codes = codecs.escape_decode(
-                    q.res.value.rep.rep_value)[0]
-                for byte_counter, (byte, char) in enumerate(zip(ascii_codes, q.res.value.rep.rep_value)):
-                    char = '\\n' if char == '\n' else char
-                    char = '\\t' if char == '\t' else char
-                    assembly += gen_instr(
-                        f"MOVE #{byte}, #{q.op1.offset + byte_counter}[.IY]", f"assigning char '{char}'")
-
-            else:
-                assert q.res.offset is not None
-                if q.res.scope == OperandScope.LOCAL:
-                    pointer = ".IX"
-                    access_register_offset = 1
-                else:
-                    pointer = ".IY"
-                    access_register_offset = 0
-                for byte_counter in range(64):
-                    assert q.op1.offset is not None
-                    assembly += gen_instr(
-                        f"MOVE #{q.res.offset + byte_counter + access_register_offset}[{pointer}], #{q.op1.offset + byte_counter}[.IY]")
-            return assembly
-            # return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)}", "ASSIGN op1, res")
-        else:
+        if q.op_options is None:
             raise CodeGenException(
-                f"Assign operation has an invalid scope for op1 = {q.op1}")
-    else:
-        return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)}", "ASSIGN op1, res")
+                "When assigning a string the access register size must be specified")
+        assert q.op1.offset is not None
+        assembly = ""
+        left_ar_pointer = ".IX" if q.op1.scope == OperandScope.LOCAL else ".IY"
+        if q.res.scope == OperandScope.TEMPORAL:
+            # right expression is a constant
+            assert q.res.value is not None
+            assert q.res.value.rep is not None
+            assert q.res.value.rep.rep_value is not None
+            assert isinstance(q.res.value.rep.rep_value, str)
+            ascii_codes = codecs.escape_decode(
+                q.res.value.rep.rep_value)[0]
+            for byte_counter, (byte, char) in enumerate(zip(ascii_codes, q.res.value.rep.rep_value)):
+                char = '\\n' if char == '\n' else char
+                char = '\\t' if char == '\t' else char
+                assembly += gen_instr(
+                    f"MOVE #{byte}, #{q.op1.offset + byte_counter}[{left_ar_pointer}]", f"assigning char '{char}'")
+            assembly += gen_instr(
+                f"MOVE #0, #{q.op1.offset + len(ascii_codes)}[{left_ar_pointer}]", "null terminator")
+        else:
+            right_ar_pointer = ".IX" if q.res.scope == OperandScope.LOCAL else ".IY"
+            # right expression is a variable
+            assert q.res.offset is not None
+            for byte_counter in range(64):
+                assert q.op1.offset is not None
+                assembly += gen_instr(
+                    f"MOVE #{q.res.offset + byte_counter}[{left_ar_pointer}], #{q.op1.offset + byte_counter}[{right_ar_pointer}]")
+         # add the null terminator
+        return assembly
+    return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)}", "ASSIGN op1, res")
 
 
 def gen_goto(q: Quartet) -> str:

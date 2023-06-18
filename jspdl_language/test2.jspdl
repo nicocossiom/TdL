@@ -1,6 +1,11 @@
-function hola(){
-    print("hola");
-}
+let int b;
+b=1;
+let string c;
+c = "c";
 
-hola();
-print("sale de la funcion");
+function main(){
+    let string a;
+    a = "a";
+    print(a);
+}
+main();

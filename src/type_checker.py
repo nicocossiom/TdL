@@ -33,7 +33,7 @@ def get_scope(identifier: str) -> cg.OperandScope:
 
 
 def ast_type_check_tree(tree: Tree):
-    st.global_symbol_table["main"] = FnEntry(
+    st.global_symbol_table["__main__"] = FnEntry(
         JSPDLType.VOID, [], tree.root_node)
     type_check_result = True
     for child in tree.root_node.named_children:
@@ -118,7 +118,14 @@ def assignment_statement(node: Node):
     if identifier not in st.current_symbol_table and identifier not in st.global_symbol_table:
         print_error(UndeclaredVariableError(node))
         return TypeCheckResult(JSPDLType.INVALID)
-    var = st.current_symbol_table[identifier]
+    if identifier in st.current_symbol_table and st.current_symbol_table != st.global_symbol_table:
+        var = st.current_symbol_table[identifier]
+        scope = cg.OperandScope.LOCAL
+        ar_offset = st.current_symbol_table.access_register_size
+    else:
+        var = st.global_symbol_table[identifier]
+        scope = cg.OperandScope.GLOBAL
+        ar_offset = 0
 
     expression_checked: TypeCheckResult = rule_functions[expression.type](
         expression)
@@ -129,7 +136,6 @@ def assignment_statement(node: Node):
     if not check_left_right_type_eq(TypeCheckResult(
             var.type), expression_checked, var.node, expression, [var.type]):
         return TypeCheckResult(JSPDLType.INVALID)
-    scope = get_scope(identifier)
     assert isinstance(var, VarEntry)
     var.value = DefinedFomOperation()
     assert isinstance(var, VarEntry)
@@ -139,7 +145,11 @@ def assignment_statement(node: Node):
         Quartet(
             Operation.ASSIGN,
             op1=Operand(offset=var.offset, op_type=var.type, scope=scope),
-            res=Operand(value=expression_checked.value, offset=expression_checked.offset, scope=expression_checked.scope)))
+            res=Operand(value=expression_checked.value,
+                        offset=expression_checked.offset, scope=expression_checked.scope),
+            op_options={"ar_offset": ar_offset}
+        ),
+    )
     return TypeCheckResult(JSPDLType.VOID)
 
 
@@ -210,6 +220,7 @@ def get_trs_from_ts_with_id_and_value(identifier: str, node: Node):
         if isinstance(var.value, Undefined):
             print_error(NonInitializedError(node))
             return TypeCheckResult(JSPDLType.INVALID)
+
         return TypeCheckResult(
             type=var.type, identifier=identifier, offset=var.offset,
             c3d_rep=identifier, scope=get_scope(identifier))
@@ -437,7 +448,7 @@ def return_statement(node: Node) -> TypeCheckResult:
         )
     if st.current_symbol_table == st.global_symbol_table:
         # returning value from global scope not allowed
-        main_fn = st.global_symbol_table["main"]
+        main_fn = st.global_symbol_table["___main___"]
         assert isinstance(main_fn, st.FnEntry)
         print_error(ReturnTypeMismatchError(
             node, main_fn, JSPDLType.VOID))
@@ -509,6 +520,7 @@ def function_declaration(node: Node) -> TypeCheckResult:
             op_options={"tag_identifier": identifier}
         )
     )
+    st.current_symbol_table = st.global_symbol_table
     return TypeCheckResult(type=JSPDLType.VOID, identifier=identifier)
 
 
@@ -581,13 +593,13 @@ def function_call(node: Node) -> TypeCheckResult:
                             scope=arg.scope, op_type=arg.type)
                 )
             )
-
+    access_register_size = 0 if st.current_symbol_table == st.global_symbol_table else st.current_symbol_table.access_register_size
     cg.quartet_queue.append(
         Quartet(
             Operation.CALL,
             op_options={
                 "tag_identifier": identifier,
-                "access_register_size": st.current_symbol_table.access_register_size + fn.arg_size,
+                "access_register_size": access_register_size,
                 "ret_type": fn.return_type,
                 "tag_count": cg.functions_tag_counters[identifier]
             }

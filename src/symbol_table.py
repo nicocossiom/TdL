@@ -77,10 +77,11 @@ class FnEntry(Entry):
 class SymbolTable:
     def __init__(self, st_function_parameters_size: Optional[int] = None) -> None:
         self.entries: Dict[str, Entry] = {}
-        self.current_offset = 0
-        self.access_register_size = 0 \
-            if st_function_parameters_size is None \
-            else st_function_parameters_size + 1  # EM
+        if st_function_parameters_size is not None:
+            # + 1(EM) + st_function_parameters_size
+            self.access_register_size = st_function_parameters_size + 1
+        else:
+            self.access_register_size = 0
 
     def __contains__(self, key: str) -> bool:
         return key in self.entries
@@ -90,8 +91,7 @@ class SymbolTable:
 
     def __setitem__(self, key: str, value: Entry) -> None:
         if isinstance(value, VarEntry):
-            value.offset = self.current_offset
-            self.current_offset += value.size
+            value.offset = self.access_register_size
             self.access_register_size += value.size
         self.entries[key] = value
 
