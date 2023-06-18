@@ -1,6 +1,6 @@
 import codecs
 from enum import Enum
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 import symbol_table as st
 from symbol_table import JSPDLType
@@ -142,12 +142,14 @@ class Quartet:
                  op: Operation,
                  op1: Operand | None = None,
                  op2: Operand | None = None,
-                 res: Operand | None = None
+                 res: Operand | None = None,
+                 op_options: dict[str, Any] | None = None
                  ) -> None:
         self.op: Operation = op
         self.op1: Optional[Operand] = op1
         self.op2: Optional[Operand] = op2
         self.res: Optional[Operand] = res
+        self.op_options = op_options
 
     def __repr__(self) -> str:
         return f"({self.op}\n\t\top1={self.op1},\n\t\top2={self.op2}\n\t\tres={self.res}\n\t)"
@@ -332,39 +334,59 @@ def gen_goto(q: Quartet) -> str:
     return gen_instr(f"BR ${q.op1.value}", "jumps to the tag specified in the operand")
 
 
+if_error_msg = "If operation must have at least one operand and a result"
+
+
 def gen_if_false_goto(q: Quartet) -> str:
+    if q.op_options is None:
+        raise CodeGenException(if_error_msg)
+    if q.op_options.get("tag") is None:
+        raise CodeGenException(if_error_msg)
     if not q.op1:
         raise CodeGenException(
             "If_False_Goto operation must recieve an operand")
-    print(f"q.op1.value: {q.op1.value}")
-
+    given_tag_counter: int = q.op_options["tag"]
     return gen_instr(f"CMP {find_op(q.op1)}, #0", "compare if condition, if cmp 0 means false") + \
-        gen_instr(f"BZ $if_tag{if_tag_counter}",
+        gen_instr(f"BZ $if_tag{given_tag_counter}",
                   "if comparision is false, jump after the if block")
 
 
-def gen_if_tag(_quartet: Quartet) -> str:
-    global if_tag_counter
-    ret_val = f"if_tag{if_tag_counter}:\n"
-    if_tag_counter += 1
+def gen_if_tag(q: Quartet) -> str:
+    if q.op_options is None:
+        raise CodeGenException(if_error_msg)
+    if q.op_options.get("tag") is None:
+        raise CodeGenException(if_error_msg)
+    given_tag_counter: int = q.op_options["tag"]
+    ret_val = f"if_tag{given_tag_counter}:\n"
+    ret_val += gen_instr("NOP", "NOP to avoid two if consecutive labels")
     return ret_val
 
 
 def gen_while_true_goto(q: Quartet) -> str:
-    global while_tag_counter
+    if q.op_options is None:
+        raise CodeGenException(if_error_msg)
+    if q.op_options.get("tag") is None:
+        raise CodeGenException(if_error_msg)
     if not q.op1:
         raise CodeGenException(
-            "If_False_Goto operation must recieve an operand")
-
+            "While_True_Goto operation must recieve an operand")
+    given_tag_counter: int = q.op_options["tag"] 
     ret_val = gen_instr(f"CMP {find_op(q.op1)}, #1", "compare while condition, if cmp 1 means true") + \
-        gen_instr(f"BZ $while_tag{while_tag_counter}",
+        gen_instr(f"BZ $while_tag{given_tag_counter}",
                   "if while condition is true, jump at the beginning of the block")
-    while_tag_counter += 1
     return ret_val
 
 
-def gen_while_tag(_quartet: Quartet) -> str:
-    ret_val = f"while_tag{while_tag_counter}:\n"
+def gen_while_tag(q: Quartet) -> str:
+    if q.op_options is None:
+        raise CodeGenException(if_error_msg)
+    if q.op_options.get("tag") is None:
+        raise CodeGenException(if_error_msg)
+    given_tag_counter: int = q.op_options["tag"]
+    
+    ret_val = f"while_tag{given_tag_counter}:\n"
+    ret_val += gen_instr("NOP", "NOP to avoid two while consecutive labels")
+
     return ret_val
 
 

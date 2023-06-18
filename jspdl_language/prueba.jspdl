@@ -1,7 +1,12 @@
-print("hola1");
+let int c;
+let boolean d;
+c=0;
+d=false;
 
-print("hola2");
-
-print("hola3");
-
-print("hola4");
+do{
+        print("c = ");
+        print(c);
+        print("\n");
+        if(c==3) d=false;
+        c++;
+    }while(d);

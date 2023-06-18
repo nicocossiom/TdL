@@ -2,7 +2,28 @@ let int a;
 a = 0;
 let boolean b;
 b = true;
+
+let int c;
+c = 0;
+let boolean d;
+d = true;
+
 do{
+    print("a = ");
+    print(a);
+    print("\n");
     a++;
-    if(a==3) b = false;
+    if(a==3) b=false;
+    do{
+        print("c = ");
+        print(c);
+        print("\n");
+        if(c==3) d=false;
+        c++;
+    }while(d);
+    print("d = ");
+    print(d);
+    print("\n");
 }while(b);
+print("b = ");
+print(b);

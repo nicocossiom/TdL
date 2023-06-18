@@ -30,7 +30,8 @@ def get_scope(identifier: str) -> cg.OperandScope:
 
 
 def ast_type_check_tree(tree: Tree):
-    st.global_symbol_table["main"] = FnEntry(JSPDLType.VOID, [], tree.root_node)
+    st.global_symbol_table["main"] = FnEntry(
+        JSPDLType.VOID, [], tree.root_node)
     type_check_result = True
     for child in tree.root_node.named_children:
         if rule_functions[child.type](child).type == JSPDLType.INVALID:
@@ -578,16 +579,19 @@ def do_while_statement(node: Node) -> TypeCheckResult:
     do_while_body = node.child_by_field_name("do_while_body")
     assert isinstance(do_while_condition, Node)
     assert isinstance(do_while_body, Node)
+    tag_for_this_while = cg.while_tag_counter
     # generate tag for start of loop
-    cg.quartet_queue.append(Quartet(Operation.WHILE_TAG))
-    body_checked = rule_functions[do_while_body.type](do_while_body)
-    if body_checked.type == JSPDLType.INVALID:
-        return TypeCheckResult(JSPDLType.INVALID)
+    cg.quartet_queue.append(
+        Quartet(Operation.WHILE_TAG, op_options={"tag": tag_for_this_while}))
+    cg.while_tag_counter += 1
     # generate the condition expression
     condition_checked = rule_functions[do_while_condition.type](
         do_while_condition)
     if (condition_checked.type == JSPDLType.INVALID
             or condition_checked.type != JSPDLType.BOOLEAN):
+        return TypeCheckResult(JSPDLType.INVALID)
+    body_checked = rule_functions[do_while_body.type](do_while_body)
+    if body_checked.type == JSPDLType.INVALID:
         return TypeCheckResult(JSPDLType.INVALID)
     # generate the check for the condition with branch back to
     # the start of the loop if condition is true
@@ -595,9 +599,12 @@ def do_while_statement(node: Node) -> TypeCheckResult:
         Quartet(
             Operation.WHILE_TRUE,
             Operand(value=condition_checked.value,
-                    scope=condition_checked.scope),
+                    scope=condition_checked.scope,
+                    offset=condition_checked.offset),
+            op_options={"tag": tag_for_this_while},
         )
     )
+    cg.while_tag_counter -= 1
     return TypeCheckResult(JSPDLType.VOID)
 
 
@@ -615,21 +622,24 @@ def if_statement(node: Node) -> TypeCheckResult:
         print_error(TypeMismatchError(
             if_condition, JSPDLType.BOOLEAN, if_condition_checked.type))
         return TypeCheckResult(JSPDLType.INVALID)
-
+    tag_for_this_if = cg.if_tag_counter
     # generar comparacion con 0 y salto a etiqueta
     cg.quartet_queue.append(
         Quartet(
             Operation.IF_FALSE,
             Operand(value=if_condition_checked.value,
-                    scope=if_condition_checked.scope),
+                    scope=if_condition_checked.scope, offset=if_condition_checked.offset),
+            op_options={"tag": tag_for_this_if},
         )
     )
+    cg.if_tag_counter += 1
     if_body_checked: TypeCheckResult = rule_functions[if_body.type](if_body)
     if if_body_checked.type == JSPDLType.INVALID:
         return TypeCheckResult(JSPDLType.INVALID)
-    # etiq
-    cg.quartet_queue.append(Quartet(Operation.IF_TAG))
 
+    # etiq
+    cg.quartet_queue.append(
+        Quartet(Operation.IF_TAG, op_options={"tag": tag_for_this_if}))
     return TypeCheckResult(JSPDLType.VOID)
 
 
