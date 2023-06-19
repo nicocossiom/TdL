@@ -135,7 +135,7 @@ def assignment_statement(node: Node):
             node, expression_checked.type, var.type))
         return TypeCheckResult(JSPDLType.INVALID)
     if not check_left_right_type_eq(TypeCheckResult(
-            var.type), expression_checked, var.node, expression, [var.type]):
+            var.type), expression_checked, captures[0][0], expression, [var.type]):
         return TypeCheckResult(JSPDLType.INVALID)
     assert isinstance(var, VarEntry)
     var.value = DefinedFomOperation()
@@ -444,14 +444,10 @@ def return_statement(node: Node) -> TypeCheckResult:
             "access_register_size": st.current_symbol_table.access_register_size
         }
     if len(captures) == 0:
-        # no return value
-        scope = cg.OperandScope.GLOBAL \
-            if st.current_symbol_table == st.global_symbol_table \
-            else cg.OperandScope.LOCAL
+        cg.c3d_queue.append("return")
         cg.quartet_queue.append(
             Quartet(
                 Operation.RETURN,
-                Operand(scope=scope),
                 op_options=options
             )
         )
@@ -476,6 +472,7 @@ def return_statement(node: Node) -> TypeCheckResult:
     if (node.parent is not None and node.parent.parent is not None and node.parent.parent.type == "function_declaration"):
         # top level return -> function has at least one return that will always be executed
         current_fn.has_at_least_one_return = True
+    cg.c3d_queue.append(f"return {value_checked.c3d_rep}")
     cg.quartet_queue.append(
         Quartet(
             Operation.RETURN,
@@ -524,18 +521,21 @@ def function_declaration(node: Node) -> TypeCheckResult:
         st_function_parameters_size=sum(
             [st.size_dict[arg.type] for arg in args])
     )
+    cg.c3d_queue.append(f"go to {identifier}_end")
     block_checked = rule_functions[capt_dict["block"].type](capt_dict["block"])
     if block_checked.type == JSPDLType.INVALID:
         return TypeCheckResult(JSPDLType.INVALID)
     if ret_type != JSPDLType.VOID and not current_fn.has_at_least_one_return:
         print_error(NoValidReturnInFunctionBody(capt_dict["identifier"]))
         return TypeCheckResult(JSPDLType.INVALID)
+
     cg.quartet_queue.append(
         Quartet(
             Operation.RETURN,
             op_options={"tag_identifier": identifier}
         )
     )
+    cg.c3d_queue.append(f"{identifier}_end:")
     cg.quartet_queue.append(
         Quartet(
             Operation.FUNCTION_DECLARATION_END_TAG,
@@ -615,6 +615,7 @@ def function_call(node: Node) -> TypeCheckResult:
                 node, fn_args, args_types))
             return TypeCheckResult(JSPDLType.INVALID)
         for arg in args:
+            cg.c3d_queue.append(f"param {arg.value}")
             cg.quartet_queue.append(
                 Quartet(
                     Operation.PARAM,
@@ -623,6 +624,7 @@ def function_call(node: Node) -> TypeCheckResult:
                 )
             )
     access_register_size = 0 if st.current_symbol_table == st.global_symbol_table else st.current_symbol_table.access_register_size
+    cg.c3d_queue.append(f"{cg.get_new_temporal_per_st()} := call {identifier}")
     cg.quartet_queue.append(
         Quartet(
             Operation.CALL,
@@ -636,7 +638,7 @@ def function_call(node: Node) -> TypeCheckResult:
     )
     cg.functions_tag_counters[identifier] += 1
     # return value comes from ret_val field at the end of the symbol table
-    return TypeCheckResult(fn.return_type, offset=st.current_symbol_table.access_register_size, scope=cg.OperandScope.LOCAL)
+    return TypeCheckResult(fn.return_type, c3d_rep=cg.get_last_temporal_st(),  offset=st.current_symbol_table.access_register_size, scope=cg.OperandScope.LOCAL)
 
 
 def argument_list(node: Node) -> List[TypeCheckResult] | None:

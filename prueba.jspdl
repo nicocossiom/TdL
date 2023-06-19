@@ -1,0 +1,5 @@
+function uno int(){
+    return 1;
+}
+let int id;
+print(uno());

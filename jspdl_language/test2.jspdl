@@ -1,7 +1,15 @@
-function uno string(){
-    let string hola;
-    hola = "hola";
-    return hola;
+let int c; 
+let boolean d; 
+c = 0;
+d = true; 
+function nada int (){
+    if (c == 2) return 1; 
+    print("nada");
+    print(c);
+    print("\n");
+    c++; 
+    nada();
+    return 2; 
 }
-let int id;
-print(uno());
+c = nada();
+print(c);
