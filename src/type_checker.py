@@ -169,7 +169,9 @@ def post_increment_statement(node: Node) -> TypeCheckResult | Any:
     if identifier not in st.current_symbol_table and identifier not in st.global_symbol_table:
         print_error(UndeclaredVariableError(node))
         return TypeCheckResult(JSPDLType.INVALID)
-    var = st.current_symbol_table[identifier]
+    var = st.current_symbol_table[identifier] \
+        if identifier in st.current_symbol_table \
+        else st.global_symbol_table[identifier]
 
     if isinstance(var, FnEntry):
         print_error(TypeMismatchError(node, JSPDLType.FUNCTION, var.type))
@@ -281,7 +283,7 @@ def or_expression(node: Node) -> TypeCheckResult:
     right: TypeCheckResult = rule_functions[node_right.type](node_right)
     if check_left_right_type_eq(left, right, node_left, node_right, [left.type]):
         cg.c3d_queue.append(
-            f"{cg.get_new_temporal()} := {left.c3d_rep} || {right.c3d_rep}")
+            f"{cg.get_new_temporal_per_st()} := {left.c3d_rep} || {right.c3d_rep}")
         res_op_val = cg.OpVal(rep=cg.OpValRep(cg.OpValRepType.ACCUMULATOR))
         cg.quartet_queue.append(
             Quartet(Operation.OR,
@@ -291,7 +293,7 @@ def or_expression(node: Node) -> TypeCheckResult:
                                 scope=cg.OperandScope.TEMPORAL)
                     )
         )
-        return TypeCheckResult(JSPDLType.BOOLEAN, value=res_op_val, c3d_rep=cg.get_last_temporal(), scope=cg.OperandScope.TEMPORAL)
+        return TypeCheckResult(JSPDLType.BOOLEAN, value=res_op_val, c3d_rep=cg.get_last_temporal_st(), scope=cg.OperandScope.TEMPORAL)
     else:
         return TypeCheckResult(JSPDLType.INVALID)
 
@@ -303,14 +305,15 @@ def equality_expression(node: Node) -> TypeCheckResult:
     right: TypeCheckResult = rule_functions[node_right.type](node_right)
     if check_left_right_type_eq(left, right, node_left, node_right, [left.type]):
         cg.c3d_queue.append(
-            f"""if {id_if_not_literal_value(left)} == {id_if_not_literal_value(right)} goto true
-{cg.get_new_temporal()} := 0
-goto next
-true: 
-{cg.get_new_temporal()} := 1
-next:
+            f"""if {left.c3d_rep} == {right.c3d_rep} goto true_{cg.expression_tag_counter}
+{cg.get_new_temporal_per_st()} := 0
+goto next_{cg.expression_tag_counter}
+true_{cg.expression_tag_counter}: 
+{cg.get_last_temporal_st()} := 1
+next_{cg.expression_tag_counter}:
 """
         )
+        cg.expression_tag_counter += 1
         res_op_val = cg.OpVal(rep=cg.OpValRep(cg.OpValRepType.REGISTER, ".R2"))
         cg.quartet_queue.append(
             Quartet(Operation.EQUALS,
@@ -323,7 +326,7 @@ next:
         return TypeCheckResult(
             JSPDLType.BOOLEAN,
             value=res_op_val,
-            c3d_rep=cg.get_new_temporal(),
+            c3d_rep=cg.get_new_temporal_per_st(),
             scope=cg.OperandScope.TEMPORAL
         )
     else:
@@ -342,11 +345,12 @@ def addition_expression(node: Node) -> TypeCheckResult:
     if (len(captures) == 2 and node.named_children[0].type != "addition_expression"):
         node_left = captures[0][0]
         node_right = captures[1][0]
-        left = value(node_left)
-        right = value(node_right)
+        left: TypeCheckResult = rule_functions[node_left.type](node_left)
+        right: TypeCheckResult = rule_functions[node_right.type](node_right)
         if check_left_right_type_eq(left, right, node_left, node_right, [JSPDLType.INT]):
-            cg.c3d_queue.append(cg.get_new_temporal() +
-                                " := " + str(left.value) + " + " + str(right.value))
+            assert left.c3d_rep is not None and right.c3d_rep is not None
+            cg.c3d_queue.append(cg.get_new_temporal_per_st() +
+                                " := " + left.c3d_rep + " + " + right.c3d_rep)
             res_op_val = cg.OpVal(rep=cg.OpValRep(cg.OpValRepType.ACCUMULATOR))
             cg.quartet_queue.append(
                 Quartet(
@@ -358,7 +362,7 @@ def addition_expression(node: Node) -> TypeCheckResult:
                     Operand(value=res_op_val,  scope=cg.OperandScope.TEMPORAL)
                 )
             )
-            return TypeCheckResult(JSPDLType.INT, value=res_op_val, c3d_rep=cg.get_last_temporal(), scope=cg.OperandScope.TEMPORAL)
+            return TypeCheckResult(JSPDLType.INT, value=res_op_val, c3d_rep=cg.get_last_temporal_st(), scope=cg.OperandScope.TEMPORAL)
         else:
             return TypeCheckResult(JSPDLType.INVALID)
 
@@ -368,7 +372,7 @@ def addition_expression(node: Node) -> TypeCheckResult:
     right = value(node_right)
     if check_left_right_type_eq(left, right, node_left, node_right, [JSPDLType.INT]):
         cg.c3d_queue.append(
-            f"{cg.get_new_temporal()} := {left.c3d_rep} + {id_if_not_literal_value(right)}")
+            f"{cg.get_new_temporal_per_st()} := {left.c3d_rep} + {id_if_not_literal_value(right)}")
         res_op_val = cg.OpVal(rep=cg.OpValRep(cg.OpValRepType.ACCUMULATOR))
         cg.quartet_queue.append(
             Quartet(
@@ -379,7 +383,7 @@ def addition_expression(node: Node) -> TypeCheckResult:
                 Operand(value=res_op_val, scope=cg.OperandScope.TEMPORAL)
             )
         )
-        return TypeCheckResult(JSPDLType.INT, value=res_op_val, c3d_rep=cg.get_last_temporal(), scope=cg.OperandScope.TEMPORAL)
+        return TypeCheckResult(JSPDLType.INT, value=res_op_val, c3d_rep=cg.get_last_temporal_st(), scope=cg.OperandScope.TEMPORAL)
     else:
         return TypeCheckResult(JSPDLType.INVALID)
 
@@ -656,16 +660,19 @@ def do_while_statement(node: Node) -> TypeCheckResult:
         Quartet(Operation.WHILE_TAG, op_options={"tag": tag_for_this_while}))
     cg.while_tag_counter += 1
     # generate the condition expression
-    condition_checked = rule_functions[do_while_condition.type](
+    condition_checked: TypeCheckResult = rule_functions[do_while_condition.type](
         do_while_condition)
     if (condition_checked.type == JSPDLType.INVALID
             or condition_checked.type != JSPDLType.BOOLEAN):
         return TypeCheckResult(JSPDLType.INVALID)
+    cg.c3d_queue.append(f"while_start_{tag_for_this_while}:")
     body_checked = rule_functions[do_while_body.type](do_while_body)
     if body_checked.type == JSPDLType.INVALID:
         return TypeCheckResult(JSPDLType.INVALID)
     # generate the check for the condition with branch back to
     # the start of the loop if condition is true
+    cg.c3d_queue.append(
+        f"if {condition_checked.c3d_rep} == 1 goto while_start_{tag_for_this_while}")
     cg.quartet_queue.append(
         Quartet(
             Operation.WHILE_TRUE,
@@ -694,6 +701,9 @@ def if_statement(node: Node) -> TypeCheckResult:
         return TypeCheckResult(JSPDLType.INVALID)
     tag_for_this_if = cg.if_tag_counter
     # compare with 0 and jump to tag
+    cg.c3d_queue.append(
+        f"if {if_condition_checked.c3d_rep} == 0 goto if_false_{tag_for_this_if}"
+    )
     cg.quartet_queue.append(
         Quartet(
             Operation.IF_FALSE,
@@ -706,7 +716,7 @@ def if_statement(node: Node) -> TypeCheckResult:
     if_body_checked: TypeCheckResult = rule_functions[if_body.type](if_body)
     if if_body_checked.type == JSPDLType.INVALID:
         return TypeCheckResult(JSPDLType.INVALID)
-
+    cg.c3d_queue.append(f"if_false_{tag_for_this_if}:")
     # etiq
     cg.quartet_queue.append(
         Quartet(Operation.IF_TAG, op_options={"tag": tag_for_this_if}))

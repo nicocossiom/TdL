@@ -7,25 +7,32 @@ from symbol_table import JSPDLType
 
 static_memory_size = 0
 
-temporal_counter = 0
+global_temporal_counter = -1
+fn_temporal_counter = -1
 
 is_in_global_scope = True
 if_tag_counter = 0
 while_tag_counter = 0
+expression_tag_counter = 0
 functions_tag_counters: dict[str, int] = {}
 
-assembly = " "
+assembly = ""
 
 
-def get_new_temporal() -> str:
-    global temporal_counter
-    temporal_counter += 1
-    return f"t{temporal_counter}"
+def get_new_temporal_per_st() -> str:
+    global global_temporal_counter, fn_temporal_counter
+    if st.current_symbol_table != st.global_symbol_table:
+        fn_temporal_counter += 1
+        return f"t{fn_temporal_counter}"
+    global_temporal_counter += 1
+    return f"t{global_temporal_counter}"
 
 
-def get_last_temporal() -> str:
-    global temporal_counter
-    return f"t{temporal_counter}"
+def get_last_temporal_st() -> str:
+    global global_temporal_counter, fn_temporal_counter
+    if st.current_symbol_table != st.global_symbol_table:
+        return f"t{fn_temporal_counter}"
+    return f"t{global_temporal_counter}"
 
 
 OpValActualValues = int | str | bool
@@ -153,7 +160,13 @@ class Quartet:
         self.op_options = op_options
 
     def __repr__(self) -> str:
-        return f"({self.op}\n\t\top1={self.op1},\n\t\top2={self.op2}\n\t\tres={self.res}\n\t)"
+        props: list[str] = []
+        for elem_name, elem_value in self.__dict__.items():
+            if elem_value is not None:
+                props.append(f"{elem_name}={elem_value}")
+        elems = ",\n\t\t".join(props)
+        rep = "Quartet(\n\t\t"
+        return f"{rep}{elems}\n\t\t)"
 
 
 # queue of quartets to be processed after code is type-checked -> all quartets are generated
@@ -533,7 +546,8 @@ SUB #{access_register_size}, #{st.size_dict[ret_type]}; desplazamiento del valor
 ADD .A, .IX ; el acumulador ahora contiene la dirección del valor de retorno 
 MOVE .IX, .R1; salvaguardamos el valor de IX
 MOVE .IY, .R3; salvaguardamos el valor de IY
-MOVE .A, .IY; situamos la direccion del valor de retorno en IY""")
+MOVE .A, .IY; situamos la direccion del valor de retorno en IY
+""")
 
         for i in range(st.size_dict[ret_type]):
             instr += gen_instr(f"MOVE #{i}[.IY], #{i}[.IX]",
