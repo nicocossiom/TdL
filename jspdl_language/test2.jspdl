@@ -1,7 +1,7 @@
-function main int(){
-    return 1;
+function uno string(){
+    let string hola;
+    hola = "hola";
+    return hola;
 }
-let int a;
-a = main();
-main();
-print(a);
+let int id;
+print(uno());
