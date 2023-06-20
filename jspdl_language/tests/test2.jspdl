@@ -1,6 +1,12 @@
-
-function hola( string x){
-    print("adios\n");
+function recibe( string x){
+    print("\nrecibido: ");
     print(x);
 }
-hola("hola");
+
+
+function manda( string x){
+    print("\nmandando: ");
+    print(x);
+    recibe(x);
+}
+manda("hola");

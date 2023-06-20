@@ -539,18 +539,20 @@ def gen_function_param(q: Quartet) -> str:
             lit_n = len(literals_queue)
             literals_queue.append(
                 gen_instr(
-                    f"lit{lit_n+1}: DATA \"{q.op1.value.rep.rep_value}\"")
+                    f"lit{lit_n+1}: DATA \"{q.op1.value.rep.rep_value}\"", "param literal for function call"
+                )
             )
             param = f"""
-MOVE #lit{lit_n+1}, .R5 ; poner en R5 ladireccion de LECTURA
+
+MOVE #lit{lit_n+1}, .R5 ; R5 = direccion param {param_number} literal = direccion de LECTURA
 """
         else:
             param = f"""
-MOVE .A, .R5; poner en R5 la direccion de LECTURA
 ADD #{q.op1.offset}, {pointer}
+MOVE .A, .R5; R5 = direccion param {param_number} referencia = direccion de LECTURA
 """
         param_str = f"""
-MOVE .A, .R6; poner en R6 la direccion de ESCRITURA
+MOVE .A, .R6; R6 = direccion de ESCRITURA = direccion del param {param_number} de la funcion llamada
 {param}
 
         {copy_operand()}
