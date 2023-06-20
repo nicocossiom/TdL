@@ -1,12 +1,8 @@
-function recibe( string x){
-    print("\nrecibido: ");
-    print(x);
+function suma int(int a, int b){
+    let int res; 
+    res = a + b;
+    let int res2;
+    return res;
 }
 
-
-function manda( string x){
-    print("\nmandando: ");
-    print(x);
-    recibe(x);
-}
-manda("hola");
+print(suma(suma(suma(1,2),3),4));

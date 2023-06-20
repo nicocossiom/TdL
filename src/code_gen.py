@@ -45,6 +45,7 @@ class OpValRepType(Enum):
     ACCUMULATOR = 1
     LITERAL = 2
     REGISTER = 3
+    TEMPORAL = 4
 
     def __repr__(self) -> str:
         """
@@ -230,6 +231,7 @@ MOVE #static_memory_start, .IY ; intialize IY to point to the start of the stati
         assembly += code_gen_dict[q.op](q)
     assembly += """
                         HALT
+                        NOP
 """
     for fn in function_queue:
         assembly += code_gen_dict[fn.op](fn)
@@ -290,8 +292,10 @@ def gen_add(q: Quartet) -> str:
     if not q.op1 or not q.op2 or not q.res:
         raise CodeGenException(
             "Addition operation must have at least two operands and a result")
-
-    return gen_instr(f"ADD {find_op(q.op1)}, {find_op(q.op2)}", "ADD op1, op2")
+    return gen_instrs(f"""
+ADD {find_op(q.op1)}, {find_op(q.op2)} ; ADD op1, op2
+MOVE .A, {find_op(q.res)} ; mover el resultado de la acumulación a la temporal
+      """)
 
 
 def gen_inc(q: Quartet) -> str:
@@ -461,8 +465,8 @@ def gen_print(q: Quartet) -> str:
 
     else:  # boolean or int
         if q.op1.scope == OperandScope.TEMPORAL:
-            return gen_instr(f"MOVE {find_op(q.op1)}, .R6", "save literal int  in R6") + \
-                gen_instr("WRINT .R6", "write literal int stored .R6 to console")
+            return gen_instr(f"MOVE {find_op(q.op1)}, .R9", "save literal int  in R9") + \
+                gen_instr("WRINT .R9", "write literal int stored .R9 to console")
         else:
             return gen_instr(f"WRINT {find_op(q.op1)}", "WRINT op1")
 
@@ -573,19 +577,28 @@ def gen_function_return(q: Quartet) -> str:
         raise CodeGenException(
             "Function_return operation must have op_options with defined AC size")
 
-    if q.op1:
-        if (q.op1.scope == OperandScope.GLOBAL):
-            return gen_instr("HALT", "si en el programa principal haces un return, paras de ejecutar")
-        # local return from function
-        access_register_size: int = q.op_options["access_register_size"]
-        assert q.op1.op_type is not None
+    if not q.op1:
+        ret_val += gen_instr("BR [.IX] ;devuelve el control al llamador")
+        return ret_val
+    if (q.op1.scope == OperandScope.GLOBAL):
+        return gen_instr("HALT", "si en el programa principal haces un return, paras de ejecutar")
+    # local return from function
+    access_register_size: int = q.op_options["access_register_size"]
+    assert q.op1.op_type is not None
+    if q.op1.op_type == JSPDLType.STRING:
+        ret_val += gen_instrs(f""" 
+; nos han llamado, tenemos que dejar en .R5 la direccion del valor de retorno
+SUB #{access_register_size}, #{st.size_dict[q.op1.op_type]}  ; tamaño del valor devuelto = {st.size_dict[q.op1.op_type]}
+ADD .A, .IX ; A contiene la dirección del valor de retorno
+MOVE .A, .R5; R5 = direccion de ESCRITURA = direccion del valor de retorno
+""")
+    else:
         ret_val += gen_instrs(f""" 
 SUB #{access_register_size}, #{st.size_dict[q.op1.op_type]}  ; tamaño del valor devuelto = {st.size_dict[q.op1.op_type]}
 ADD .A, .IX ; A contiene la dirección del valor de retorno
-MOVE {find_op(q.op1)}, [.A]; Y es el desplazamiento de op1 en la TS
+MOVE .A, .R5; R5 = direccion de ESCRITURA = direccion del valor de retorno
+MOVE {find_op(q.op1)}, [.A]; colocar valor de retorno 
         """)
-    ret_val += gen_instr("BR [.IX] ;devuelve el control al llamador")
-
     return ret_val
 
 
@@ -611,14 +624,29 @@ MOVE #{ret_tag}, [.IX]; coloco la dirección del salto de retorno en el EM del R
 BR /{function_tag}; salto al codigo de la funcion llamada
 """)
 
+    ret_val = ""
     if q.op_options["ret_type"] != JSPDLType.VOID:
         # hay valor de retorno
         ret_type = q.op_options["ret_type"]
-    else:
-        instr += gen_instrs(f"""
+        if ret_type == JSPDLType.STRING:
+            ret_val = (f"""
+; llamado deja en .R5 la direccion del valor de retorno
+; nosotros en .R6 tenemos que dejar la direccion donde copiarlo, esto nuestro RA : EM + param + locales 
+""")
+        else:
+            ret_val = (f"""
+; llamado deja en .R5 la direccion del valor de retorno
+; copiamos directamente a un registro
+MOVE [.R5], .R8 ; R8 = valor de retorno
+; ponemos el valor de retorno en la temporal
+MOVE .R8, #{access_register_size}[.IX]
+""")
+
+    instr += gen_instrs(f"""
 {ret_tag}: 
 SUB .IX, #{access_register_size} 
 MOVE .A, .IX ; recolocamos el puntero de pila en el EM del llamado
+{ret_val}
     """)
     return instr
 

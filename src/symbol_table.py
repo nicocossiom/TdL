@@ -78,9 +78,9 @@ class FnEntry(Entry):
 class SymbolTable:
     def __init__(self, st_function_parameters_size: Optional[int] = None, parent: Optional["SymbolTable"] = None) -> None:
         self.entries: Dict[str, Entry] = {}
-        if st_function_parameters_size is not None:
+        if parent is not None:
             # + 1(EM) + st_function_parameters_size
-            self.access_register_size = st_function_parameters_size + 1
+            self.access_register_size = 1
         else:
             self.access_register_size = 0
 

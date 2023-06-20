@@ -338,6 +338,7 @@ def id_if_not_literal_value(x: TypeCheckResult):
 
 
 def addition_expression(node: Node) -> TypeCheckResult:
+    result_offset = st.current_symbol_table.access_register_size if st.current_symbol_table != st.global_symbol_table else 0
     base_query = language.query(
         "(addition_expression ( value ) @left ( value ) @right)")
     captures = base_query.captures(node)
@@ -347,45 +348,42 @@ def addition_expression(node: Node) -> TypeCheckResult:
         node_right = captures[1][0]
         left: TypeCheckResult = rule_functions[node_left.type](node_left)
         right: TypeCheckResult = rule_functions[node_right.type](node_right)
-        if check_left_right_type_eq(left, right, node_left, node_right, [JSPDLType.INT]):
-            assert left.c3d_rep is not None and right.c3d_rep is not None
-            cg.c3d_queue.append(cg.get_new_temporal_per_st() +
-                                " := " + left.c3d_rep + " + " + right.c3d_rep)
-            res_op_val = cg.OpVal(rep=cg.OpValRep(cg.OpValRepType.ACCUMULATOR))
-            cg.quartet_queue.append(
-                Quartet(
-                    Operation.ADD,
-                    Operand(value=left.value,
-                            offset=left.offset, scope=left.scope),
-                    Operand(value=right.value,
-                            offset=right.offset, scope=right.scope),
-                    Operand(value=res_op_val,  scope=cg.OperandScope.TEMPORAL)
-                )
-            )
-            return TypeCheckResult(JSPDLType.INT, value=res_op_val, c3d_rep=cg.get_last_temporal_st(), scope=cg.OperandScope.TEMPORAL)
-        else:
+        if not check_left_right_type_eq(left, right, node_left, node_right, [JSPDLType.INT]):
             return TypeCheckResult(JSPDLType.INVALID)
+        assert left.c3d_rep is not None and right.c3d_rep is not None
+        cg.c3d_queue.append(cg.get_new_temporal_per_st() +
+                            " := " + left.c3d_rep + " + " + right.c3d_rep)
+        cg.quartet_queue.append(
+            Quartet(
+                Operation.ADD,
+                Operand(value=left.value,
+                        offset=left.offset, scope=left.scope),
+                Operand(value=right.value,
+                        offset=right.offset, scope=right.scope),
+                Operand(offset=result_offset, scope=cg.OperandScope.LOCAL)
+            )
+        )
+        return TypeCheckResult(JSPDLType.INT, offset=result_offset, c3d_rep=cg.get_last_temporal_st(), scope=cg.OperandScope.LOCAL)
 
     node_left = node.named_children[0]
     node_right = node.named_children[1]
     left = addition_expression(node_left)
     right = value(node_right)
-    if check_left_right_type_eq(left, right, node_left, node_right, [JSPDLType.INT]):
-        cg.c3d_queue.append(
-            f"{cg.get_new_temporal_per_st()} := {left.c3d_rep} + {id_if_not_literal_value(right)}")
-        res_op_val = cg.OpVal(rep=cg.OpValRep(cg.OpValRepType.ACCUMULATOR))
-        cg.quartet_queue.append(
-            Quartet(
-                Operation.ADD,
-                Operand(value=left.value, scope=cg.OperandScope.TEMPORAL),
-                Operand(value=right.value, offset=right.offset,
-                        scope=right.scope),
-                Operand(value=res_op_val, scope=cg.OperandScope.TEMPORAL)
-            )
-        )
-        return TypeCheckResult(JSPDLType.INT, value=res_op_val, c3d_rep=cg.get_last_temporal_st(), scope=cg.OperandScope.TEMPORAL)
-    else:
+
+    if not check_left_right_type_eq(left, right, node_left, node_right, [JSPDLType.INT]):
         return TypeCheckResult(JSPDLType.INVALID)
+
+    cg.c3d_queue.append(
+        f"{cg.get_new_temporal_per_st()} := {left.c3d_rep} + {id_if_not_literal_value(right)}")
+    cg.quartet_queue.append(
+        Quartet(
+            Operation.ADD,
+            Operand(value=left.value, scope=left.scope, offset=left.offset),
+            Operand(value=right.value, offset=right.offset, scope=right.scope),
+            Operand(offset=result_offset, scope=cg.OperandScope.LOCAL)
+        )
+    )
+    return TypeCheckResult(JSPDLType.INT, offset=result_offset, c3d_rep=cg.get_last_temporal_st(), scope=cg.OperandScope.LOCAL)
 
 
 def input_statement(node: Node) -> TypeCheckResult:
@@ -434,7 +432,7 @@ def print_statement(node: Node):
 
 
 def return_statement(node: Node) -> TypeCheckResult:
-    query = language.query("(return_statement ( value )? @value)")
+    query = language.query("(return_statement ( _ )? @value)")
     captures = query.captures(node)
     global current_fn
     options = {}
@@ -507,13 +505,9 @@ def function_declaration(node: Node) -> TypeCheckResult:
         return TypeCheckResult(JSPDLType.INVALID)
     ret_type = JSPDLType(unwrap_text(capt_dict["type"].text)) if capt_dict.get(
         "type") is not None else JSPDLType.VOID
-    st.current_symbol_table = st.SymbolTable(0)
+    st.current_symbol_table = st.SymbolTable(parent=st.global_symbol_table)
     args = argument_declaration_list(
         capt_dict["argument_declaration_list"]) if "argument_declaration_list" in capt_dict else []
-    st_function_parameters_size = sum(
-        [st.size_dict[arg.type] for arg in args])
-    # manul return just in case body of function does not have return statement
-    st.current_symbol_table.access_register_size += st_function_parameters_size
 
     cg.functions_tag_counters[identifier] = 0
     cg.quartet_queue.append(
@@ -612,7 +606,7 @@ def function_call(node: Node) -> TypeCheckResult:
         print_error(CallWithInvalidArgumentsError(
             node, fn_args, []))
         return TypeCheckResult(JSPDLType.INVALID)
-    elif len(captures) == 2:
+    elif len(captures) >= 2:
         # function call with arguments
         args = argument_list(captures[1][0])
         if args is None:
@@ -653,8 +647,13 @@ def function_call(node: Node) -> TypeCheckResult:
         )
     )
     cg.functions_tag_counters[identifier] += 1
-    # return value comes from ret_val field at the end of the symbol table
-    return TypeCheckResult(fn.return_type, c3d_rep=cg.get_last_temporal_st(), value=cg.OpVal(f"#{access_register_size}[.IY]"), scope=cg.OperandScope.TEMPORAL)
+    op_offset = st.current_symbol_table.access_register_size if st.current_symbol_table != st.global_symbol_table else 0
+    return TypeCheckResult(
+        fn.return_type,
+        offset=op_offset,
+        c3d_rep=cg.get_last_temporal_st(),
+        scope=cg.OperandScope.LOCAL
+    )
 
 
 def argument_list(node: Node) -> List[TypeCheckResult] | None:
