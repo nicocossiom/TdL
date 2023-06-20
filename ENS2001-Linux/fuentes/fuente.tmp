@@ -1,5 +1,0 @@
-
-                RES 2 ; reserve 2 memory addresses for global variables
-                MOVE /1, #1; ASSIGN op1, res
-                MOVE /2, #2; ASSIGN op1, res
-                END

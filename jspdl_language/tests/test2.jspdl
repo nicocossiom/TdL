@@ -1,0 +1,6 @@
+
+function hola( string x){
+    print("adios\n");
+    print(x);
+}
+hola("hola");

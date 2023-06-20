@@ -188,7 +188,6 @@ def c3d_write_all():
 def find_op(o: Operand) -> str:
     if o.scope == OperandScope.TEMPORAL:
         return str(o.value)  # return the representation given by OpValRep
-
     if o.value is None:
         assert o.offset is not None
         if o.scope == OperandScope.GLOBAL:
@@ -204,7 +203,10 @@ def find_op(o: Operand) -> str:
 def gen_code():
     # static memory = global variables = local variables of main function
     global assembly
-    static_memory_size = st.global_symbol_table.access_register_size
+    static_memory_size = 0
+    for entry in st.global_symbol_table.entries.values():
+        if isinstance(entry, st.VarEntry):
+            static_memory_size += entry.size
 
     print("3Instruction code generation:")
     print("------------------------------")
@@ -355,11 +357,18 @@ def gen_assign(q: Quartet) -> str:
             right_ar_pointer = ".IX" if q.res.scope == OperandScope.LOCAL else ".IY"
             # right expression is a variable
             assert q.res.offset is not None
-            for byte_counter in range(64):
-                assert q.op1.offset is not None
-                assembly += gen_instr(
-                    f"MOVE #{q.res.offset + byte_counter}[{left_ar_pointer}], #{q.op1.offset + byte_counter}[{right_ar_pointer}]")
-         # add the null terminator
+            assert q.op1.offset is not None
+            pointer = get_pointer_from_operand_scope(q.op1)
+            pointer = get_pointer_from_operand_scope(q.res)
+            assembly += f"""
+ADD #{q.op1.offset}, {pointer}
+MOVE .A, .R6; poner en R6 la direccion de ESCRITURA
+ADD #{q.res.offset}, {pointer}
+MOVE .A, .R5; poner en R5 la direccion de LECTURA
+
+        {copy_operand()}
+        """
+
         return assembly
     return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)}", "ASSIGN op1, res")
 
@@ -480,18 +489,79 @@ def gen_function_end_tag(q: Quartet) -> str:
     return f"{identifier}_end:"
 
 
+def get_pointer_from_operand_scope(op: Operand) -> str:
+    if op.scope == OperandScope.GLOBAL:
+        pointer = ".IY"
+    else:
+        pointer = ".IX"
+    return pointer
+
+
+copy_tag = -1
+
+
+def copy_operand() -> str:
+    global copy_tag
+    copy_tag += 1
+    instr = f""" 
+MOVE #0, .R7; r7 = contador para salir del bucle de asignacion de strings
+
+; copiar los datos de op1 a res
+copy_{copy_tag}_loop:
+MOVE [.R5], [.R6] ; #offset[/op1] -> #offset[/res]
+INC .R5; aumentamos la posicion de la que leemos
+INC .R6;  aumentamos la posicion en la que escribimos
+INC .R7; aumentamos el contador del bucle
+CMP #62 , .R7
+BP /copy_{copy_tag}_loop; si R7 <63 repites el bucle
+"""
+    return instr
+#         param_str = (f"""
+# {copy_operand(q.op1, Operand(scope=OperandScope.LOCAL, offset=(param_number * st.size_dict[q.op1.op_type])+1))}
+
+# """
+
+
 def gen_function_param(q: Quartet) -> str:
-    if not q.op1:
+    if not q.op1 or not q.op2:
         raise CodeGenException(
             "Parameter operation must have at least one operand")
     if not q.op_options:
         raise CodeGenException(
             "Parameter operation must have op_options with defined AC size")
     access_register_size: int = q.op_options["access_register_size"]
-    return gen_instr(f"ADD {find_op(q.op1)}, IX ", "movemos el puntero al siguiente RA") +\
-        gen_instr(f"ADD {access_register_size}, .A", "Nos colocamos en la parte de params de nuestro RA") +\
-        gen_instr(f"MOVE {find_op(q.op1)},[.A] ",
-                  "Pasamos el param a su posicion, la suma anterior incrementa por cada param")
+    param_number: int = q.op_options["param_number"]
+    assert q.op1.op_type is not None
+    pointer = get_pointer_from_operand_scope(q.op2)
+    if q.op1.op_type == JSPDLType.STRING:
+        if q.op1.value is not None and q.op1.value.rep is not None and q.op1.value.rep.rep_value is not None:
+
+            lit_n = len(literals_queue)
+            literals_queue.append(
+                gen_instr(
+                    f"lit{lit_n+1}: DATA \"{q.op1.value.rep.rep_value}\"")
+            )
+            param = f"""
+MOVE #lit{lit_n+1}, .R5 ; poner en R5 ladireccion de LECTURA
+"""
+        else:
+            param = f"""
+MOVE .A, .R5; poner en R5 la direccion de LECTURA
+ADD #{q.op1.offset}, {pointer}
+"""
+        param_str = f"""
+MOVE .A, .R6; poner en R6 la direccion de ESCRITURA
+{param}
+
+        {copy_operand()}
+        """
+    else:
+        param_str = f"MOVE {find_op(q.op1)},[.A] ; Pasamos el param a su posicion, la suma anterior incrementa por cada param"
+    return gen_instrs(f"""
+ADD #{access_register_size}, .IX ; movemos el puntero al siguiente RA
+ADD #{(param_number * st.size_dict[q.op1.op_type])+1}, .A; Nos colocamos en la parte de params del RA del llamado
+{param_str}
+""")
 
 
 def gen_function_return(q: Quartet) -> str:
@@ -531,33 +601,17 @@ def gen_function_call(q: Quartet) -> str:
         raise CodeGenException(
             "Function_tag operation must have op_options with defined tag_identifier which must correspond to a function_tag")
     instr = gen_instrs(f"""
-MOVE #{ret_tag}, #{access_register_size}[.IX]; coloco la dirección del salto de retorno en el EM del RA de la funcion llamada 
-ADD #{access_register_size}, .IX ; avanzo el puntero de pila al RA de la funcion llamada
+ADD #{access_register_size}, .IX ; avanzo el puntero de pila al RA de la funcion llamada   
 MOVE .A, .IX; recoloco el puntero de pila al comienzo del resgistro de activacion al llamado
+
+MOVE #{ret_tag}, [.IX]; coloco la dirección del salto de retorno en el EM del RA de la funcion llamada 
+
 BR /{function_tag}; salto al codigo de la funcion llamada
-    """)
+""")
 
     if q.op_options["ret_type"] != JSPDLType.VOID:
         # hay valor de retorno
         ret_type = q.op_options["ret_type"]
-        instr += gen_instrs(f""" 
-{ret_tag}:  ; etiqueta de retorno
-SUB #{access_register_size}, #{st.size_dict[ret_type]}; desplazamiento del valor de retorno en el RA == direccion del valor de retorno
-ADD .A, .IX ; el acumulador ahora contiene la dirección del valor de retorno 
-MOVE .IX, .R1; salvaguardamos el valor de IX
-MOVE .IY, .R3; salvaguardamos el valor de IY
-MOVE .A, .IY; situamos la direccion del valor de retorno en IY
-""")
-
-        for i in range(st.size_dict[ret_type]):
-            instr += gen_instr(f"MOVE #{i}[.IY], #{i}[.IX]",
-                               f"movemos el byte {i} a la temporal del del registro de activacion del llamador")
-
-        instr += gen_instrs(f"""MOVE .R3, .IY; restauramos el puntero a las variables globales
-MOVE .R1, .IX; recolocamos el puntero de pila en en el registro de activacion del llamador
-SUB .IX, #{access_register_size}; en el acumulador tenemos el comienzo de la pila de la funcion llamadora 
-MOVE .A, .IX;recolocamos el puntero de pila en el EM de la funcion llamadora
-""")
     else:
         instr += gen_instrs(f"""
 {ret_tag}: 
