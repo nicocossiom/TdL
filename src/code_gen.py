@@ -335,7 +335,6 @@ MOVE #1, {find_op(q.res)}; equal ? true
 
 
 def gen_assign(q: Quartet) -> str:
-    global assembly
     # op1 es la variable es a la que se le asigna
     # res es el valor que se le asigna, que viene de otra variable o de una constante
     if not q.op1 or not q.res:
@@ -346,11 +345,11 @@ def gen_assign(q: Quartet) -> str:
         assert q.res.value.rep is not None
         assert q.res.value.rep.rep_real_size is not None
         assert q.op1.offset is not None
+        code = ""
         pointer_op1 = get_pointer_from_operand_scope(q.op1)
-        assembly = ""
         if q.res.scope == OperandScope.TEMPORAL:
             # right expression is a constant
-            assembly += gen_instrs(f"""
+            code += gen_instrs(f"""
 MOVE {q.res.value}, .R5; poner en .R5 la direccion de LECTURA
 ADD #{q.op1.offset}, {pointer_op1}
 MOVE .A, .R6; poner en R6 la direccion de ESCRITURA
@@ -362,7 +361,7 @@ MOVE .A, .R6; poner en R6 la direccion de ESCRITURA
             assert q.op1.offset is not None
             pointer_op1 = get_pointer_from_operand_scope(q.op1)
             pointer_res = get_pointer_from_operand_scope(q.res)
-            assembly += gen_instr(f"""
+            code += gen_instr(f"""
 ADD #{q.op1.offset}, {pointer_op1}
 MOVE .A, .R6; poner en R6 la direccion de ESCRITURA
 ADD #{q.res.offset}, {pointer_res}
@@ -370,7 +369,7 @@ MOVE .A, .R5; poner en R5 la direccion de LECTURA
 {copy_operand()}
 """)
 
-        return assembly
+        return code
     return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)}", "ASSIGN op1, res")
 
 
@@ -449,7 +448,29 @@ def gen_input(q: Quartet) -> str:
     if q.op1.op_type == JSPDLType.INT:  # is an integer or boolean
         return gen_instr(f"ININT {find_op(q.op1)}", "ININT op1")
     else:  # is a string
-        return gen_instr(f"INSTR {find_op(q.op1)}", "INSTR op1")
+        rep = find_op(q.op1)
+        replaced = replace_accumulator_for_pointer(q.op1, rep, "INSTR")
+        if replaced is None:
+            return gen_instr(f"INSTR {rep}", "INSTR op1")
+        return replaced
+
+
+def replace_accumulator_for_pointer(op1: Operand, rep: str, operation: str) -> Optional[str]:
+    if rep != ".A":
+        return None
+    assert op1.offset is not None
+    assert op1 is not None
+    assert op1.offset is not None
+    if op1.offset <= 127:
+        return None
+    pointer = ".IY" if op1.scope == OperandScope.GLOBAL else ".IX"
+    return gen_instrs(f"""
+ADD #{op1.offset}, {pointer}
+MOVE .A, {pointer}
+{operation} [{pointer}]
+SUB {pointer}, #{op1.offset}
+MOVE .A, {pointer}
+""")
 
 
 def gen_print(q: Quartet) -> str:
@@ -461,20 +482,10 @@ def gen_print(q: Quartet) -> str:
         rep = find_op(q.op1)
         if "#l" in rep:
             rep = rep.replace('#', '/')
-        if rep == ".A":
-            pointer = ".IY" if q.op1.scope == OperandScope.GLOBAL else ".IX"
-            global assembly
-            assert q.op1.offset is not None
-            if q.op1.offset >= 127:
-                return gen_instrs(f"""
-ADD #{q.op1.offset}, {pointer}
-MOVE .A, {pointer}
-WRSTR #0[{pointer}]
-SUB #{q.op1.offset}, {pointer}
-MOVE .A, {pointer}
-""")
-        return gen_instr(f"WRSTR {rep}", "WRSTR op1")
-
+        replaced = replace_accumulator_for_pointer(q.op1, rep, "WRSTR")
+        if replaced is None:
+            return gen_instr(f"WRSTR {rep}", "WRSTR op1")
+        return replaced
     else:  # boolean or int
         if q.op1.scope == OperandScope.TEMPORAL:
             return gen_instr(f"MOVE {find_op(q.op1)}, .R9", "save literal int  in R9") + \
