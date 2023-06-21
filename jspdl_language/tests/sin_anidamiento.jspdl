@@ -1,0 +1,52 @@
+let int x;
+x=0;
+let int s;
+s = 5;
+let int y;
+y=10;
+
+let string t;
+t = "macarracas";
+let string tdos;
+tdos = "adios";
+print(t);
+print(tdos);
+º
+
+function menorQue boolean(int a, int b){
+    let boolean res;
+    res = true;
+    if(a==b) res=false;
+    return res;
+}
+
+/*
+recorre el bucle hasta que s sea igual a y, printea los valores en cada iteracion
+*/
+do{
+    print("iteracion:");
+    print(x);
+    x++;
+    print("\nvalor de s:");
+    print(s);
+    print("\nvalor de y:");
+    print(y);
+    s++;
+ } while(menorQue(s,20));
+
+function sonIguales string(int a, int b){
+    let string res;
+    res = "NO";
+    if (a == b) res= "SI";
+    return res;
+}
+
+function elegirString string(string a, string b, boolean c){
+    
+    if(c) return a;
+    return b;
+}
+
+function cambiarGlobalX(int valor){
+    x=valor;
+}

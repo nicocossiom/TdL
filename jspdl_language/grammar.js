@@ -31,7 +31,7 @@ module.exports = grammar({
 		let_statement: $ => seq('let', field("type", $.type), field("identifier", $.identifier), ';'),
 		if_statement: $ => seq('if', '(', field("if_condition", $._expression), ')', field("if_body", choice($._statement, $.block))),
 		do_while_statement: $ =>
-			seq('do', field("do_while_body", $.block), 'while', '(', field("do_while_condition", $._expression), ')', ';'),
+			seq('do', field("do_while_body", $.block_and_declaration), 'while', '(', field("do_while_condition", $._expression), ')', ';'),
 		return_statement: $ => seq('return', field("return_value", optional($._expression)), ';'),
 		print_statement: $ => seq('print', '(', $._expression, ')', ';'),
 		input_statement: $ => seq('input', '(', $.identifier, ')', ';'),
@@ -99,7 +99,7 @@ module.exports = grammar({
 		/\s/,
 		/\n/,
 		/\xa0/, // non-breaking space
-		/\/\/.*/, // single-line comment
+		/\/\/.*\n/, // single - line comment
 		/\/\*[^*]*\*+(?:[^/*][^*]*\*+)*\//, // multi-line comment
 	],
 

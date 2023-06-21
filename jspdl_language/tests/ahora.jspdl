@@ -1,0 +1,22 @@
+let int counter;
+counter = 0;
+let boolean cond;
+cond = true;
+let string a;
+a = "1 ";
+print(a);
+do {
+    let string prueba;
+    prueba = "2 "; 
+    print(prueba);
+    if (counter == 0){
+        cond = false; 
+    }
+}while(cond);
+
+let string hola;
+hola = " 3";
+print(hola);
+
+// [counter, cond, a, prueba, hola]
+//   1        1   64    64     64

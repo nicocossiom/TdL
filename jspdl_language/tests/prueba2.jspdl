@@ -1,0 +1,30 @@
+let int counter;
+counter = 0;
+let boolean cond;
+cond = true;
+let string val; 
+val = "\nval";
+function X(string a){
+    do {
+        let string b;
+        b = "no";
+        print(b);
+        print(a);
+        counter++;
+        
+        if (counter == 2){
+            cond = false; 
+            val="meremelada";
+        }
+    }while(cond);
+    let int d;
+    d= 2;
+    print(d);
+}
+X("si");
+print("\ncounter = ");
+print(counter);
+print("\nval = ");
+print(val);
+print("\ncond = ");
+print(cond);

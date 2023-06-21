@@ -22,7 +22,7 @@
             "program": "${workspaceFolder}/src/main.py",
             "console": "integratedTerminal",
             "args": [
-                "jspdl_language/tests/test2.jspdl",
+                "jspdl_language/tests/ahora.jspdl",
                 // "--ast"
             ],
             "justMyCode": true

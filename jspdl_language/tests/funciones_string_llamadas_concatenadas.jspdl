@@ -1,0 +1,12 @@
+function holaLiteral(){
+    return "hola"; 
+}
+function holaVariableLocal(){
+    let string; 
+    a = "hola"; 
+    return a; 
+}
+function variableLocal(string aQuien){
+    let string; 
+    return a; 
+}

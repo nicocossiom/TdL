@@ -122,11 +122,9 @@ def assignment_statement(node: Node):
     if identifier in st.current_symbol_table and st.current_symbol_table != st.global_symbol_table:
         var = st.current_symbol_table[identifier]
         scope = cg.OperandScope.LOCAL
-        ar_offset = st.current_symbol_table.access_register_size
     else:
         var = st.global_symbol_table[identifier]
         scope = cg.OperandScope.GLOBAL
-        ar_offset = 0
 
     expression_checked: TypeCheckResult = rule_functions[expression.type](
         expression)
@@ -147,8 +145,7 @@ def assignment_statement(node: Node):
             Operation.ASSIGN,
             op1=Operand(offset=var.offset, op_type=var.type, scope=scope),
             res=Operand(value=expression_checked.value,
-                        offset=expression_checked.offset, scope=expression_checked.scope),
-            op_options={"ar_offset": ar_offset}
+                        offset=expression_checked.offset, scope=expression_checked.scope, op_type=expression_checked.type),
         ),
     )
     return TypeCheckResult(JSPDLType.VOID)
@@ -242,21 +239,29 @@ def value(node: Node) -> TypeCheckResult:
             return get_trs_from_ts_with_id_and_value(identifier, node)
         case "literal_string":
             literal_val = get_value_as_str_from_node(node)
-            return TypeCheckResult(
+            lit_n = len(cg.literals_queue)
+            cg.literals_queue.append(
+                cg.gen_instr(
+                    f"lit{lit_n}: DATA \"{literal_val}\"")
+            )
+            res =  TypeCheckResult(
                 JSPDLType.STRING,
                 cg.OpVal(rep=cg.OpValRep(
-                    rep_value=literal_val,
-                    rep_type=cg.OpValRepType.LITERAL
+                    rep_value=f"#lit{lit_n}",
+                    rep_type=cg.OpValRepType.LITERAL,
+                    rep_real_size=len(literal_val)
                 )),
                 c3d_rep=literal_val, scope=cg.OperandScope.TEMPORAL
             )
+            
+            return res
         case "literal_number":
             literal_val = get_value_as_str_from_node(node)
             return TypeCheckResult(
                 JSPDLType.INT,
                 cg.OpVal(rep=cg.OpValRep(
                     rep_value=f"#{literal_val}",
-                    rep_type=cg.OpValRepType.LITERAL
+                    rep_type=cg.OpValRepType.LITERAL,
                 )),
                 c3d_rep=literal_val, scope=cg.OperandScope.TEMPORAL
             )
@@ -282,18 +287,18 @@ def or_expression(node: Node) -> TypeCheckResult:
     left: TypeCheckResult = rule_functions[node_left.type](node_left)
     right: TypeCheckResult = rule_functions[node_right.type](node_right)
     if check_left_right_type_eq(left, right, node_left, node_right, [left.type]):
+        res_offset = st.current_symbol_table.access_register_size if st.current_symbol_table != st.global_symbol_table else 0
         cg.c3d_queue.append(
             f"{cg.get_new_temporal_per_st()} := {left.c3d_rep} || {right.c3d_rep}")
-        res_op_val = cg.OpVal(rep=cg.OpValRep(cg.OpValRepType.ACCUMULATOR))
         cg.quartet_queue.append(
             Quartet(Operation.OR,
                     Operand(left.value, left.offset, left.scope),
                     Operand(right.value, right.offset, right.scope),
-                    res=Operand(value=res_op_val,
-                                scope=cg.OperandScope.TEMPORAL)
+                    res=Operand(offset=res_offset,
+                                scope=cg.OperandScope.LOCAL)
                     )
         )
-        return TypeCheckResult(JSPDLType.BOOLEAN, value=res_op_val, c3d_rep=cg.get_last_temporal_st(), scope=cg.OperandScope.TEMPORAL)
+        return TypeCheckResult(JSPDLType.BOOLEAN, offset=res_offset, c3d_rep=cg.get_last_temporal_st(), scope=cg.OperandScope.LOCAL)
     else:
         return TypeCheckResult(JSPDLType.INVALID)
 
@@ -410,17 +415,6 @@ def print_statement(node: Node):
     if expres_checked.type not in [JSPDLType.INT, JSPDLType.STRING, JSPDLType.BOOLEAN]:
         print_error(InvalidArgumentError(node))
         return TypeCheckResult(JSPDLType.INVALID)
-    if expres_checked.type == JSPDLType.STRING:
-        if expres_checked.value is not None and expres_checked.value.rep is not None \
-                and expres_checked.value.rep.rep_type == cg.OpValRepType.LITERAL:
-            assert expres_checked.value.rep.rep_value is not None
-            lit_n = len(cg.literals_queue)
-            cg.literals_queue.append(
-                cg.gen_instr(
-                    f"lit{lit_n+1}: DATA \"{expres_checked.value.rep.rep_value}\"")
-            )
-            expres_checked.value.rep.rep_value = f"/lit{lit_n +1}"
-
     cg.quartet_queue.append(
         Quartet(
             Operation.PRINT,
@@ -471,9 +465,9 @@ def return_statement(node: Node) -> TypeCheckResult:
         # top level return -> function has at least one return that will always be executed
         current_fn.has_at_least_one_return = True
     cg.c3d_queue.append(f"return {value_checked.c3d_rep}")
-    if options.get("access_register_size") is not None:
-        assert isinstance(options["access_register_size"], int)
-        options["access_register_size"] += st.size_dict[value_checked.type]
+    # if options.get("access_register_size") is not None:
+    #     assert isinstance(options["access_register_size"], int)
+    #     options["access_register_size"] += st.size_dict[value_checked.type]
     cg.quartet_queue.append(
         Quartet(
             Operation.RETURN,
@@ -633,21 +627,20 @@ def function_call(node: Node) -> TypeCheckResult:
                     }
                 )
             )
-    access_register_size = 0 if st.current_symbol_table == st.global_symbol_table else st.current_symbol_table.access_register_size
+    op_offset = st.current_symbol_table.access_register_size if st.current_symbol_table != st.global_symbol_table else 0
     cg.c3d_queue.append(f"{cg.get_new_temporal_per_st()} := call {identifier}")
     cg.quartet_queue.append(
         Quartet(
             Operation.CALL,
             op_options={
                 "tag_identifier": identifier,
-                "access_register_size": access_register_size,
+                "access_register_size": op_offset,
                 "ret_type": fn.return_type,
                 "tag_count": cg.functions_tag_counters[identifier]
             }
         )
     )
     cg.functions_tag_counters[identifier] += 1
-    op_offset = st.current_symbol_table.access_register_size if st.current_symbol_table != st.global_symbol_table else 0
     return TypeCheckResult(
         fn.return_type,
         offset=op_offset,

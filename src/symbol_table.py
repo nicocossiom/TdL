@@ -92,8 +92,15 @@ class SymbolTable:
 
     def __setitem__(self, key: str, value: Entry) -> None:
         if isinstance(value, VarEntry):
-            value.offset = self.access_register_size
-            self.access_register_size += value.size
+            if key not in self.entries:
+                value.offset = self.access_register_size
+                self.access_register_size += value.size
+            else:
+                var = self.entries[key]
+                assert isinstance(var, VarEntry)
+                assert var.offset is not None
+                var_offset = var.offset
+                value.offset = var_offset
         self.entries[key] = value
 
     def __repr__(self) -> str:

@@ -1,4 +1,3 @@
-import codecs
 from enum import Enum
 from typing import Any, Callable, Optional
 
@@ -59,13 +58,14 @@ class OpValRep():
     Represents how can OpValue in an Operand of a Quartet must be represented
     """
 
-    def __init__(self, rep_type: OpValRepType, rep_value: Optional[str] = None) -> None:
+    def __init__(self, rep_type: OpValRepType, rep_value: Optional[str] = None, rep_real_size: Optional[int] = None) -> None:
         # value of the representation (e.g. "t1", ".R2", ".A")
         self.rep_value = rep_value
         # type of the representation (e.g. ACCUMULATOR, LITERAL, REGISTER)
         if rep_type == OpValRepType.ACCUMULATOR:
             self.rep_value = ".A"
         self.rep_type = rep_type
+        self.rep_real_size = rep_real_size
 
     def __repr__(self) -> str:
         """
@@ -191,13 +191,15 @@ def find_op(o: Operand) -> str:
         return str(o.value)  # return the representation given by OpValRep
     if o.value is None:
         assert o.offset is not None
-        if o.scope == OperandScope.GLOBAL:
-            return f"#{o.offset}[.IY]"
-        elif o.scope == OperandScope.LOCAL:
-            return f"#{o.offset}[.IX]"
-        else:
-            raise CodeGenException(
-                f"Operand {o} has an invalid scope {o.scope}")
+        assert o.scope in [
+            OperandScope.LOCAL, OperandScope.GLOBAL], "scope invalido no es ni global ni local"
+        pointer = ".IY" if o.scope == OperandScope.GLOBAL else ".IX"
+        global assembly
+        if o.offset >= 127:
+            assembly += gen_instr(f"ADD {o.offset}, {pointer}")
+            return ".A"
+        return f"#{o.offset}[{pointer}]"
+
     return f"#{o.value}"
 
 
@@ -294,7 +296,7 @@ def gen_add(q: Quartet) -> str:
             "Addition operation must have at least two operands and a result")
     return gen_instrs(f"""
 ADD {find_op(q.op1)}, {find_op(q.op2)} ; ADD op1, op2
-MOVE .A, {find_op(q.res)} ; mover el resultado de la acumulación a la temporal
+MOVE .A, {find_op(q.res)} ; mover el resultado del ADD a la temporal
       """)
 
 
@@ -311,7 +313,11 @@ def gen_or(q: Quartet) -> str:
         raise CodeGenException(
             "OR operation must have at least two operands and a result")
     else:
-        return gen_instr(f"OR {find_op(q.op1)}, {find_op(q.op2)}", "OR op1, op2")
+
+        return gen_instrs(f"""
+OR {find_op(q.op1)}, {find_op(q.op2)} ; OR op1, op2
+MOVE .A, {find_op(q.res)} ; mover el resultado del OR a la temporal
+""")
 
 
 def gen_equals(q: Quartet) -> str:
@@ -319,12 +325,13 @@ def gen_equals(q: Quartet) -> str:
         raise CodeGenException(
             "Equals operation must have at least two operands and a result")
     else:
-        return \
-            gen_instr(f"CMP {find_op(q.op1)}, {find_op(q.op2)}", "CMP op1, op2") + \
-            gen_instr("BZ $5",  "true #1. (5 bc opcode1+op1.1+op1.2+opcode2+op2.1 ) ") + \
-            gen_instr(f"MOVE #0, {find_op(q.res)}", " equal ? false") + \
-            gen_instr("BR $3", "skip next instr (3 bc opcode+op1+op2)") + \
-            gen_instr(f"MOVE #1, {find_op(q.res)}", "equal ? true")
+        return gen_instrs(f"""
+CMP {find_op(q.op1)}, {find_op(q.op2)} ; CMP op1, op2
+BZ $5 ;  true #1 (5 bc opcode1+op1.1+op1.2+opcode2+op2.1 ) 
+MOVE #0, {find_op(q.res)} ;  equal ? false
+BR $3 ; skip next instr (3 bc opcode+op1+op2)
+MOVE #1, {find_op(q.res)}; equal ? true
+""")
 
 
 def gen_assign(q: Quartet) -> str:
@@ -334,44 +341,34 @@ def gen_assign(q: Quartet) -> str:
     if not q.op1 or not q.res:
         raise CodeGenException(
             "Assign operation must have at least one operand and a result")
-    if q.op1.op_type == JSPDLType.STRING:
-        # convert the string to a list of ascii codes and move them to memory
-        if q.op_options is None:
-            raise CodeGenException(
-                "When assigning a string the access register size must be specified")
+    if q.res.op_type == JSPDLType.STRING:
+        assert q.res.value is not None
+        assert q.res.value.rep is not None
+        assert q.res.value.rep.rep_real_size is not None
         assert q.op1.offset is not None
+        pointer_op1 = get_pointer_from_operand_scope(q.op1)
         assembly = ""
-        left_ar_pointer = ".IX" if q.op1.scope == OperandScope.LOCAL else ".IY"
         if q.res.scope == OperandScope.TEMPORAL:
             # right expression is a constant
-            assert q.res.value is not None
-            assert q.res.value.rep is not None
-            assert q.res.value.rep.rep_value is not None
-            assert isinstance(q.res.value.rep.rep_value, str)
-            ascii_codes = codecs.escape_decode(
-                q.res.value.rep.rep_value)[0]
-            for byte_counter, (byte, char) in enumerate(zip(ascii_codes, q.res.value.rep.rep_value)):
-                char = '\\n' if char == '\n' else char
-                char = '\\t' if char == '\t' else char
-                assembly += gen_instr(
-                    f"MOVE #{byte}, #{q.op1.offset + byte_counter}[{left_ar_pointer}]", f"assigning char '{char}'")
-            assembly += gen_instr(
-                f"MOVE #0, #{q.op1.offset + len(ascii_codes)}[{left_ar_pointer}]", "null terminator")
+            assembly += gen_instrs(f"""
+MOVE {q.res.value}, .R5; poner en .R5 la direccion de LECTURA
+ADD #{q.op1.offset}, {pointer_op1}
+MOVE .A, .R6; poner en R6 la direccion de ESCRITURA
+{copy_operand(q.res.value.rep.rep_real_size)}
+""")
         else:
-            right_ar_pointer = ".IX" if q.res.scope == OperandScope.LOCAL else ".IY"
             # right expression is a variable
             assert q.res.offset is not None
             assert q.op1.offset is not None
-            pointer = get_pointer_from_operand_scope(q.op1)
-            pointer = get_pointer_from_operand_scope(q.res)
-            assembly += f"""
-ADD #{q.op1.offset}, {pointer}
+            pointer_op1 = get_pointer_from_operand_scope(q.op1)
+            pointer_res = get_pointer_from_operand_scope(q.res)
+            assembly += gen_instr(f"""
+ADD #{q.op1.offset}, {pointer_op1}
 MOVE .A, .R6; poner en R6 la direccion de ESCRITURA
-ADD #{q.res.offset}, {pointer}
+ADD #{q.res.offset}, {pointer_res}
 MOVE .A, .R5; poner en R5 la direccion de LECTURA
-
-        {copy_operand()}
-        """
+{copy_operand()}
+""")
 
         return assembly
     return gen_instr(f"MOVE {find_op(q.res)},{find_op(q.op1)}", "ASSIGN op1, res")
@@ -461,7 +458,22 @@ def gen_print(q: Quartet) -> str:
             "Print operation must have at least one operand")
 
     if q.op1.op_type == JSPDLType.STRING:  # is string
-        return gen_instr(f"WRSTR {find_op(q.op1)}", "WRSTR op1")
+        rep = find_op(q.op1)
+        if "#l" in rep:
+            rep = rep.replace('#', '/')
+        if rep == ".A":
+            pointer = ".IY" if q.op1.scope == OperandScope.GLOBAL else ".IX"
+            global assembly
+            assert q.op1.offset is not None
+            if q.op1.offset >= 127:
+                return gen_instrs(f"""
+ADD #{q.op1.offset}, {pointer}
+MOVE .A, {pointer}
+WRSTR #0[{pointer}]
+SUB #{q.op1.offset}, {pointer}
+MOVE .A, {pointer}
+""")
+        return gen_instr(f"WRSTR {rep}", "WRSTR op1")
 
     else:  # boolean or int
         if q.op1.scope == OperandScope.TEMPORAL:
@@ -490,7 +502,10 @@ def gen_function_end_tag(q: Quartet) -> str:
             "Function_end_tag operation must have op_options with defined tag_identifier")
     identifier = q.op_options["tag_identifier"]
 
-    return f"{identifier}_end:"
+    return gen_instrs(f"""
+{identifier}_end:
+NOP ; para evitar 2 tags juntos
+""")
 
 
 def get_pointer_from_operand_scope(op: Operand) -> str:
@@ -504,7 +519,9 @@ def get_pointer_from_operand_scope(op: Operand) -> str:
 copy_tag = -1
 
 
-def copy_operand() -> str:
+def copy_operand(size: int | None = None) -> str:
+    if size is None:
+        size = 62
     global copy_tag
     copy_tag += 1
     instr = f""" 
@@ -516,7 +533,7 @@ MOVE [.R5], [.R6] ; #offset[/op1] -> #offset[/res]
 INC .R5; aumentamos la posicion de la que leemos
 INC .R6;  aumentamos la posicion en la que escribimos
 INC .R7; aumentamos el contador del bucle
-CMP #62 , .R7
+CMP #{size} , .R7
 BP /copy_{copy_tag}_loop; si R7 <63 repites el bucle
 """
     return instr
@@ -537,37 +554,27 @@ def gen_function_param(q: Quartet) -> str:
     param_number: int = q.op_options["param_number"]
     assert q.op1.op_type is not None
     pointer = get_pointer_from_operand_scope(q.op2)
+    copy_val: int | None = None
     if q.op1.op_type == JSPDLType.STRING:
         if q.op1.value is not None and q.op1.value.rep is not None and q.op1.value.rep.rep_value is not None:
-
-            lit_n = len(literals_queue)
-            literals_queue.append(
-                gen_instr(
-                    f"lit{lit_n+1}: DATA \"{q.op1.value.rep.rep_value}\"", "param literal for function call"
-                )
-            )
             param = f"""
-
-MOVE #lit{lit_n+1}, .R5 ; R5 = direccion param {param_number} literal = direccion de LECTURA
+MOVE {q.op1.value.rep.rep_value}, .R5 ; R5 = direccion param {param_number} literal = direccion de LECTURA
 """
+            copy_val = q.op1.value.rep.rep_real_size
         else:
             param = f"""
 ADD #{q.op1.offset}, {pointer}
-MOVE .A, .R5; R5 = direccion param {param_number} referencia = direccion de LECTURA
-"""
+MOVE .A, .R5; R5 = direccion param {param_number} referencia = direccion de LECTURA"""
         param_str = f"""
 MOVE .A, .R6; R6 = direccion de ESCRITURA = direccion del param {param_number} de la funcion llamada
 {param}
-
-        {copy_operand()}
-        """
+{copy_operand(copy_val)}"""
     else:
         param_str = f"MOVE {find_op(q.op1)},[.A] ; Pasamos el param a su posicion, la suma anterior incrementa por cada param"
     return gen_instrs(f"""
 ADD #{access_register_size}, .IX ; movemos el puntero al siguiente RA
 ADD #{(param_number * st.size_dict[q.op1.op_type])+1}, .A; Nos colocamos en la parte de params del RA del llamado
-{param_str}
-""")
+{param_str}""")
 
 
 def gen_function_return(q: Quartet) -> str:
@@ -586,7 +593,13 @@ def gen_function_return(q: Quartet) -> str:
     access_register_size: int = q.op_options["access_register_size"]
     assert q.op1.op_type is not None
     if q.op1.op_type == JSPDLType.STRING:
-        ret_val += gen_instrs(f""" 
+
+        if q.op1.value is not None and q.op1.value.rep is not None and q.op1.value.rep.rep_type.LITERAL:
+            ret_val += gen_instrs(f""" 
+MOVE {find_op(q.op1)}, .R5; R5 = direccion de ESCRITURA = direccion del valor de retorno
+""")
+        else:
+            ret_val += gen_instrs(f""" 
 ; nos han llamado, tenemos que dejar en .R5 la direccion del valor de retorno
 SUB #{access_register_size}, #{st.size_dict[q.op1.op_type]}  ; tamaño del valor devuelto = {st.size_dict[q.op1.op_type]}
 ADD .A, .IX ; A contiene la dirección del valor de retorno
@@ -630,14 +643,18 @@ BR /{function_tag}; salto al codigo de la funcion llamada
         ret_type = q.op_options["ret_type"]
         if ret_type == JSPDLType.STRING:
             ret_val = (f"""
-; llamado deja en .R5 la direccion del valor de retorno
+ADD #{access_register_size}, .IX
 ; nosotros en .R6 tenemos que dejar la direccion donde copiarlo, esto nuestro RA : EM + param + locales 
+MOVE .A, .R6; poner en R6 la direccion de ESCRITURA
+; llamado deja en .R5 la direccion del valor de retorno = direccion de LECTURA
+{copy_operand()}
 """)
         else:
             ret_val = (f"""
 ; llamado deja en .R5 la direccion del valor de retorno
-; copiamos directamente a un registro
+; llamamos a copia y le decimos que nos lo deje en temporal
 MOVE [.R5], .R8 ; R8 = valor de retorno
+
 ; ponemos el valor de retorno en la temporal
 MOVE .R8, #{access_register_size}[.IX]
 """)
