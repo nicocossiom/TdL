@@ -1,52 +1,22 @@
-let int x;
-x=0;
-let int s;
-s = 5;
-let int y;
-y=10;
+let string cadena;
+let string cadena2;
 
-let string t;
-t = "macarracas";
-let string tdos;
-tdos = "adios";
-print(t);
-print(tdos);
-º
+let boolean logico;
+let int entero;
+let int condicion;
 
-function menorQue boolean(int a, int b){
-    let boolean res;
-    res = true;
-    if(a==b) res=false;
-    return res;
+cadena = "mariano";
+
+entero = 0 + -100;
+logico = entero == entero || entero == -100 || entero == 0;
+condicion = 0;
+
+function nombre string( int entero, boolean logico, string cadena){
+    cadena2= "hola";
+    return cadena2;
 }
+cadena= nombre ( entero, logico,cadena);
 
-/*
-recorre el bucle hasta que s sea igual a y, printea los valores en cada iteracion
-*/
-do{
-    print("iteracion:");
-    print(x);
-    x++;
-    print("\nvalor de s:");
-    print(s);
-    print("\nvalor de y:");
-    print(y);
-    s++;
- } while(menorQue(s,20));
+print(cadena);
 
-function sonIguales string(int a, int b){
-    let string res;
-    res = "NO";
-    if (a == b) res= "SI";
-    return res;
-}
 
-function elegirString string(string a, string b, boolean c){
-    
-    if(c) return a;
-    return b;
-}
-
-function cambiarGlobalX(int valor){
-    x=valor;
-}

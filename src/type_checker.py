@@ -79,6 +79,8 @@ def check_left_right_type_eq(
     node_right: Node,
     expected_types: list[JSPDLType],
 ) -> bool:
+    if left.type == JSPDLType.INVALID or right.type == JSPDLType.INVALID:
+        return False
     if left.type != right.type:
         if left.type not in expected_types:
             node = node_right
@@ -143,8 +145,8 @@ def assignment_statement(node: Node):
     cg.quartet_queue.append(
         Quartet(
             Operation.ASSIGN,
-            op1=Operand(offset=var.offset, op_type=var.type, scope=scope),
-            res=Operand(value=expression_checked.value,
+            res=Operand(offset=var.offset, op_type=var.type, scope=scope),
+            op1=Operand(value=expression_checked.value,
                         offset=expression_checked.offset, scope=expression_checked.scope, op_type=expression_checked.type),
         ),
     )
@@ -244,7 +246,7 @@ def value(node: Node) -> TypeCheckResult:
                 cg.gen_instr(
                     f"lit{lit_n}: DATA \"{literal_val}\"")
             )
-            res =  TypeCheckResult(
+            res = TypeCheckResult(
                 JSPDLType.STRING,
                 cg.OpVal(rep=cg.OpValRep(
                     rep_value=f"#lit{lit_n}",
@@ -253,7 +255,7 @@ def value(node: Node) -> TypeCheckResult:
                 )),
                 c3d_rep=literal_val, scope=cg.OperandScope.TEMPORAL
             )
-            
+
             return res
         case "literal_number":
             literal_val = get_value_as_str_from_node(node)
@@ -277,6 +279,14 @@ def value(node: Node) -> TypeCheckResult:
             )
         case "function_call":
             return function_call(node)
+        case "parenthesized_expression":
+            res = TypeCheckResult(JSPDLType.VOID)
+            for expr in node.named_children:
+                res = rule_functions[expr.type](expr)
+                if res.type == JSPDLType.INVALID:
+                    return TypeCheckResult(JSPDLType.INVALID)
+            return res
+
         case _:
             raise Exception(f"Unknown value type {node.type}")
 
@@ -284,10 +294,17 @@ def value(node: Node) -> TypeCheckResult:
 def or_expression(node: Node) -> TypeCheckResult:
     node_left = node.named_children[0]
     node_right = node.named_children[1]
+    ar_backup = st.current_symbol_table.access_register_size
+    res_offset = st.current_symbol_table.access_register_size - \
+        st.current_symbol_table.globals_offset
+
     left: TypeCheckResult = rule_functions[node_left.type](node_left)
     right: TypeCheckResult = rule_functions[node_right.type](node_right)
+    if node.parent is not None and node.parent.type != "or_expression":
+        st.current_symbol_table.access_register_size = ar_backup
+    else:
+        st.current_symbol_table.access_register_size += 1
     if check_left_right_type_eq(left, right, node_left, node_right, [left.type]):
-        res_offset = st.current_symbol_table.access_register_size if st.current_symbol_table != st.global_symbol_table else 0
         cg.c3d_queue.append(
             f"{cg.get_new_temporal_per_st()} := {left.c3d_rep} || {right.c3d_rep}")
         cg.quartet_queue.append(
@@ -319,20 +336,23 @@ next_{cg.expression_tag_counter}:
 """
         )
         cg.expression_tag_counter += 1
-        res_op_val = cg.OpVal(rep=cg.OpValRep(cg.OpValRepType.REGISTER, ".R2"))
+        res_offset = st.current_symbol_table.access_register_size - \
+            st.current_symbol_table.globals_offset
+        st.current_symbol_table.access_register_size += 1
+
         cg.quartet_queue.append(
             Quartet(Operation.EQUALS,
                     Operand(left.value, left.offset, left.scope),
                     Operand(right.value, right.offset, right.scope),
-                    res=Operand(value=res_op_val,
-                                scope=cg.OperandScope.TEMPORAL)
+                    res=Operand(offset=res_offset,
+                                scope=cg.OperandScope.LOCAL)
                     )
         )
         return TypeCheckResult(
             JSPDLType.BOOLEAN,
-            value=res_op_val,
+            offset=res_offset,
             c3d_rep=cg.get_new_temporal_per_st(),
-            scope=cg.OperandScope.TEMPORAL
+            scope=cg.OperandScope.LOCAL
         )
     else:
         return TypeCheckResult(JSPDLType.INVALID)
@@ -372,8 +392,8 @@ def addition_expression(node: Node) -> TypeCheckResult:
 
     node_left = node.named_children[0]
     node_right = node.named_children[1]
-    left = addition_expression(node_left)
-    right = value(node_right)
+    left = rule_functions[node_left.type](node_left)
+    right = rule_functions[node_right.type](node_right)
 
     if not check_left_right_type_eq(left, right, node_left, node_right, [JSPDLType.INT]):
         return TypeCheckResult(JSPDLType.INVALID)
@@ -595,6 +615,9 @@ def function_call(node: Node) -> TypeCheckResult:
         return TypeCheckResult(JSPDLType.INVALID)
     assert isinstance(fn, FnEntry)
     fn_args = [arg.type for arg in fn.arguments]
+    fn_args_sizes = [st.size_dict[arg.type] for arg in fn.arguments]
+    fn_args_offset = [sum(fn_args_sizes[:i])
+                      for i in range(len(fn_args_sizes))]
     if len(captures) == 1 and len(fn_args) != 0:
         # function call without arguments but function expects arguments
         print_error(CallWithInvalidArgumentsError(
@@ -602,7 +625,7 @@ def function_call(node: Node) -> TypeCheckResult:
         return TypeCheckResult(JSPDLType.INVALID)
     elif len(captures) >= 2:
         # function call with arguments
-        args = argument_list(captures[1][0])
+        args = argument_list(captures[1][0], fn_args_offset)
         if args is None:
             print_error(CallWithInvalidArgumentsError(
                 node, fn_args, [JSPDLType.INVALID]))
@@ -612,21 +635,6 @@ def function_call(node: Node) -> TypeCheckResult:
             print_error(CallWithInvalidArgumentsError(
                 node, fn_args, args_types))
             return TypeCheckResult(JSPDLType.INVALID)
-        for index, arg in enumerate(args):
-            cg.c3d_queue.append(f"param {arg.value}")
-            cg.quartet_queue.append(
-                Quartet(
-                    Operation.PARAM,
-                    Operand(value=arg.value, offset=arg.offset,
-                            scope=arg.scope, op_type=arg.type),
-                    Operand(scope=cg.OperandScope.LOCAL if (
-                            current_fn is not None) else cg.OperandScope.GLOBAL),
-                    op_options={
-                        "access_register_size": st.current_symbol_table.access_register_size if st.current_symbol_table != st.global_symbol_table else 0,  # del llamador
-                        "param_number": index
-                    }
-                )
-            )
     op_offset = st.current_symbol_table.access_register_size if st.current_symbol_table != st.global_symbol_table else 0
     cg.c3d_queue.append(f"{cg.get_new_temporal_per_st()} := call {identifier}")
     cg.quartet_queue.append(
@@ -649,12 +657,28 @@ def function_call(node: Node) -> TypeCheckResult:
     )
 
 
-def argument_list(node: Node) -> List[TypeCheckResult] | None:
+def argument_list(node: Node, arg_sizes: list[int]) -> List[TypeCheckResult] | None:
     arg_list: list[TypeCheckResult] = []
-    for val in node.named_children:
+    for index, val in enumerate(node.named_children):
         val_checked: TypeCheckResult = rule_functions[val.type](val)
         if val_checked.type == JSPDLType.INVALID:
             return None
+
+        cg.c3d_queue.append(f"param {val_checked.value}")
+        cg.quartet_queue.append(
+            Quartet(
+                Operation.PARAM,
+                Operand(value=val_checked.value, offset=val_checked.offset,
+                        scope=val_checked.scope, op_type=val_checked.type),
+                Operand(scope=cg.OperandScope.LOCAL if (
+                    current_fn is not None) else cg.OperandScope.GLOBAL),
+                op_options={
+                    "access_register_size": st.current_symbol_table.access_register_size if st.current_symbol_table != st.global_symbol_table else 0,  # del llamador
+                    "param_number": index,
+                    "arg_offset": arg_sizes[index]
+                }
+            )
+        )
         arg_list.append(val_checked)
     return arg_list
 
@@ -670,15 +694,17 @@ def do_while_statement(node: Node) -> TypeCheckResult:
         Quartet(Operation.WHILE_TAG, op_options={"tag": tag_for_this_while}))
     cg.while_tag_counter += 1
     # generate the condition expression
+
+    body_checked = rule_functions[do_while_body.type](do_while_body)
+    if body_checked.type == JSPDLType.INVALID:
+        return TypeCheckResult(JSPDLType.INVALID)
+
     condition_checked: TypeCheckResult = rule_functions[do_while_condition.type](
         do_while_condition)
     if (condition_checked.type == JSPDLType.INVALID
             or condition_checked.type != JSPDLType.BOOLEAN):
         return TypeCheckResult(JSPDLType.INVALID)
     cg.c3d_queue.append(f"while_start_{tag_for_this_while}:")
-    body_checked = rule_functions[do_while_body.type](do_while_body)
-    if body_checked.type == JSPDLType.INVALID:
-        return TypeCheckResult(JSPDLType.INVALID)
     # generate the check for the condition with branch back to
     # the start of the loop if condition is true
     cg.c3d_queue.append(

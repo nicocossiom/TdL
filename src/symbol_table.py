@@ -73,6 +73,7 @@ class FnEntry(Entry):
         for arg in arguments:
             self.arg_size += size_dict[arg.type]
         self.function_name = unwrap_text(node.named_children[0].text)
+        
 
 
 class SymbolTable:
@@ -83,6 +84,7 @@ class SymbolTable:
             self.access_register_size = 1
         else:
             self.access_register_size = 0
+        self.globals_offset = 0
 
     def __contains__(self, key: str) -> bool:
         return key in self.entries
@@ -101,6 +103,7 @@ class SymbolTable:
                 assert var.offset is not None
                 var_offset = var.offset
                 value.offset = var_offset
+            self.globals_offset = self.access_register_size
         self.entries[key] = value
 
     def __repr__(self) -> str:

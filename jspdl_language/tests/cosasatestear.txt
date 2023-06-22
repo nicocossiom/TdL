@@ -1,0 +1,27 @@
+input - hecho
+
+modificar variable global desde function - hecho
+modificar una variable local con el mismo id que una global en una function - hecho
+
+funciones con do while dentro - hecho
+funcion recursiva - a medias
+
+funciones con pasos de parametros - hecho
+funciones sin pasos de parametros - hecho
+
+asignaciones de return de funciones 
+funciones como parametros de otras funciones
+funciones como return como funcion
+funciones como booleano en un if -doWhile
+asignacion de operaciones con los return de varias funciones
+
+
+
+**las expresiones los comprobamos de nuevo cuando se arregle lo de las temporales**
+
+expresiones en la condicion del if y do-while 
+expresiones a la derecha de asignaciones -
+expresiones en returns -  
+expresiones en parametros - ok
+expresiones en parentesis - OK
+

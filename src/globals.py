@@ -10,3 +10,4 @@ file_lines: List[str] = []
 file_name: str = ""
 # code being analyzed (string)
 code: str = ""
+output_file = "out.ens"

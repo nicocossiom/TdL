@@ -1,22 +1,25 @@
-let int counter;
-counter = 0;
-let boolean cond;
-cond = true;
-let string a;
-a = "1 ";
-print(a);
-do {
-    let string prueba;
-    prueba = "2 "; 
-    print(prueba);
-    if (counter == 0){
-        cond = false; 
+function hastaDiez(int cuenta){
+    if (cuenta == 10){
+        print(cuenta);
+        return;
     }
-}while(cond);
+    cuenta++;
+    hastaDiez(cuenta);
+}
 
-let string hola;
-hola = " 3";
-print(hola);
+hastaDiez(0);
+function dameUnQuince int(){
+    return 15;
+}
+print(dameUnQuince());
 
-// [counter, cond, a, prueba, hola]
-//   1        1   64    64     64
+function hastaDiezReturn int(int cuenta){
+    if (cuenta == 10){
+        print(cuenta);
+        return cuenta;
+    }
+    cuenta++;
+    return hastaDiezReturn(cuenta);
+}
+
+print(hastaDiezReturn(0));

@@ -1,0 +1,37 @@
+cadena := mariano
+t0 := 0 + -100
+entero := t0
+if entero == entero goto true_0
+t1 := 0
+goto next_0
+true_0: 
+t1 := 1
+next_0:
+
+if entero == -100 goto true_1
+t3 := 0
+goto next_1
+true_1: 
+t3 := 1
+next_1:
+
+t5 := t2 || t4
+if entero == 0 goto true_2
+t6 := 0
+goto next_2
+true_2: 
+t6 := 1
+next_2:
+
+t8 := t5 || t7
+logico := t8
+condicion := 0
+go to nombre_end
+cadena2 := hola
+return cadena2
+nombre_end:
+param None
+param None
+param None
+t9 := call nombre
+cadena := t9

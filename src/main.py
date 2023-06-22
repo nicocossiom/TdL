@@ -55,6 +55,17 @@ def parse_arguments_and_get_raw_code() -> str:
     if os.path.isdir(globals.file):
         print(f"File {globals.file} is a directory")
         exit(-1)
+    if "-o" in sys.argv:
+        try:
+            output_file = sys.argv[sys.argv.index("-o") + 1]
+            if ".ens" not in output_file:
+                print("Output file must be a .ens file")
+                exit(-1)
+            globals.output_file = output_file
+        except IndexError:
+            print("No output file specified")
+            exit(-1)
+
     with open(globals.file, 'r') as f:
 
         globals.file_path = os.path.abspath(globals.file)
