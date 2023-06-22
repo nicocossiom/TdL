@@ -1,7 +1,0 @@
-go to nombre_end
-otro := abcd
-return otro
-nombre_end:
-param #2
-t0 := call nombre
-cadena := t0

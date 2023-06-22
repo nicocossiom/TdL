@@ -1,0 +1,50 @@
+let int kk;
+let boolean bb;
+let string s1;
+let int jj; 
+let int pp; 
+kk = 0; 
+bb = false; 
+pp = 1; 
+jj = 0; 
+function imprime (int kk, int s1)
+{
+	print(kk);
+	print (" #");
+	//if (0 == s1)	// Cuando s1 valga 0, esta expresión debe evaluarse como falsa y cuando sea positivo, debe evaluarse como verdadera
+	print(s1);
+	print(". ");
+}
+s1 = "introduce un digito. ";
+function sent int (string s)
+{
+	let string ss;
+	ss=s;
+	let int iii ;
+	iii= kk;
+	jj= iii;
+	pp= 1;
+	let int kk;
+	kk= 22;
+	input(ss);
+	s1=ss;
+	print (s); print (s1);
+	
+	do	
+	{
+		if (bb) imprime (iii, 0);
+		iii++;
+	} while (bb || (iii == kk));	// cambiar la lógica de la condición del bucle para que no sea un bucle infinito, pero conservando un operador relacional y un operador lógico. Tener en cuenta la actualización de iii dentro del bucle.
+
+	return jj;
+}
+
+bb= 0 == 5; // cambiar los valores para que bb siempre valga true en función del operador
+print(s1);
+input(kk);
+print("Escribe tu nombre. ");
+kk=11;
+imprime (sent("Hola, "), 0);
+print ("Adios, ");
+
+

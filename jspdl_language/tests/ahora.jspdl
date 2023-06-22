@@ -1,25 +1,9 @@
-function hastaDiez(int cuenta){
-    if (cuenta == 10){
-        print(cuenta);
-        return;
-    }
-    cuenta++;
-    hastaDiez(cuenta);
-}
-
-hastaDiez(0);
-function dameUnQuince int(){
-    return 15;
-}
-print(dameUnQuince());
-
-function hastaDiezReturn int(int cuenta){
-    if (cuenta == 10){
-        print(cuenta);
-        return cuenta;
-    }
-    cuenta++;
-    return hastaDiezReturn(cuenta);
-}
-
-print(hastaDiezReturn(0));
+let int c;
+c = 0;
+let boolean cond;
+cond = true;
+do{
+    c++;
+    print(c);
+    if (c == 10) cond = false;
+} while(cond);

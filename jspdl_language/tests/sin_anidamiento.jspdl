@@ -1,10 +1,9 @@
 let string cadena;
 let string otro;
 function nombre string(int i){
-    
-    return "abcd";
+    otro = "abcd"; 
+    return otro;
 }
 cadena= nombre(2);
-
-
+print(otro);
 print(cadena);
