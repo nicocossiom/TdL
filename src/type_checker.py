@@ -460,7 +460,6 @@ def return_statement(node: Node) -> TypeCheckResult:
         cg.quartet_queue.append(
             Quartet(
                 Operation.RETURN,
-                op_options=options
             )
         )
         return TypeCheckResult(JSPDLType.VOID)

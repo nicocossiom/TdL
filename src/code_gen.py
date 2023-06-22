@@ -607,26 +607,40 @@ def gen_function_return(q: Quartet) -> str:
     ret_val = ""
     salto = gen_operation(
         "BR", op1="[.IX]", comment="devuelve el control al llamador")
+
+    if not q.op1:
+        return salto
+    if (q.op1.scope == OperandScope.GLOBAL and q.op1.offset is None):
+        return gen_instr("HALT", "si en el programa principal haces un return, paras de ejecutar")
     if not q.op_options:
         raise CodeGenException(
             "Function_return operation must have op_options with defined AC size")
 
-    if not q.op1:
-        return salto
-    if (q.op1.scope == OperandScope.GLOBAL):
-        return gen_instr("HALT", "si en el programa principal haces un return, paras de ejecutar")
     # local return from function
     access_register_size: int = q.op_options["access_register_size"]
     assert q.op1.op_type is not None
-    if q.op1.op_type == JSPDLType.STRING and q.op1.value is not None and q.op1.value.rep is not None and q.op1.value.rep.rep_type.LITERAL:
-        ret_val += gen_operation("MOVE", q.op1, op2=".R5",
-                                 comment=" R5 = direccion de ESCRITURA = direccion del valor de retorno")
+    if q.op1.op_type == JSPDLType.STRING:
+        if q.op1.value is not None and q.op1.value.rep is not None and q.op1.value.rep.rep_type.LITERAL:
+            ret_val += gen_operation("MOVE", q.op1, op2=".R5",
+                                     comment=" R5 = direccion de LECTURA = direccion del valor de retorno")
+        elif q.op1.scope == OperandScope.GLOBAL:
+            ret_val += format_instructions(f"""
+ADD #{q.op1.offset}, .IY ; IY = direccion del valor de retorno
+MOVE .A, .R5; R5 = direccion de LECTURA = direccion del valor de retorno
+""")
+
     else:
         ret_val += ";conmienzo return\n"
-        ret_val += format_instructions(f""" 
+        if q.op1.scope == OperandScope.GLOBAL:
+            ret_val += format_instructions(f"""
+ADD #{q.op1.offset}, .IY ; IY = direccion del valor de retorno
+MOVE .A, .R5; R5 = direccion de LECTURA = direccion del valor de retorno
+""")
+        else:
+            ret_val += format_instructions(f""" 
 SUB #{access_register_size}, #{st.size_dict[q.op1.op_type]}  ; tamaño del valor devuelto = {st.size_dict[q.op1.op_type]}
 ADD .A, .IX ; A contiene la dirección del valor de retorno
-MOVE .A, .R5; R5 = direccion de ESCRITURA = direccion del valor de retorno""")
+MOVE .A, .R5; R5 = direccion de LECTURA = direccion del valor de retorno""")
         ret_val += gen_operation("MOVE", q.op1,
                                  op2="[.A]", comment="Colocar valor de retorno")
     ret_val += salto

@@ -9,7 +9,7 @@ funcion recursiva - a medias
 funciones con pasos de parametros - hecho
 funciones sin pasos de parametros - hecho
 
-asignaciones de return de funciones 
+asignaciones de return de funciones-  hecho 
 funciones como parametros de otras funciones
 funciones como return como funcion
 funciones como booleano en un if -doWhile

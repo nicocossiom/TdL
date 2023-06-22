@@ -1,8 +1,7 @@
 go to nombre_end
-return mamawebo
+otro := abcd
+return otro
 nombre_end:
-param #0
-param #1
-param #lit1
+param #2
 t0 := call nombre
 cadena := t0

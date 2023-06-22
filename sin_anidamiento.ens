@@ -3,121 +3,20 @@
                         ORG 0
                         MOVE .SP, .IX ; initialize IX to point to the start of the stack
                         MOVE #static_memory_start, .IY               ;  intialize IY to point to the start of the static memory
-;empieza asignacion de string
-                        MOVE #lit0, .R5                              ;  poner en .R5 la direccion de LECTURA
-                        ADD #0, .IY                                  
-                        MOVE .A, .R6                                 ;  poner en R6 la direccion de ESCRITURA
-                        MOVE #0, .R7                                 ;  r7 = contador para salir del bucle de asignacion de strings
-                                                                     ;  copiar los datos de op1 a res
-copy_0_loop:
-                        MOVE [.R5], [.R6]                            ;  #offset[/op1] -> #offset[/res]
-                        INC .R5                                      ;  aumentamos la posicion de la que leemos
-                        INC .R6                                      ;   aumentamos la posicion en la que escribimos
-                        INC .R7                                      ;  aumentamos el contador del bucle
-                        CMP #7 , .R7                                 
-                        BP /copy_0_loop                              ;  si R7 <63 repites el bucle
-;termina asignacion de string
-; empieza +
-                        ADD #0 , #-100                               ;   add op1, op2
-                        MOVE .A , #0[.IX]                            ;  move accumulator to result
-; termina +
-                        ADD #129, .IY                                ;  .R4 = .IY + 129 = operand address
-                        MOVE .A, .R4                                 
-                        MOVE #0[.IX] , [.R4]                         ;   assign op1 to res
-; empieza ==
-                        ADD #129, .IY                                ;  .R3 = .IY + 129 = operand address
-                        MOVE .A, .R3                                 
-                        ADD #129, .IY                                ;  .R4 = .IY + 129 = operand address
-                        MOVE .A, .R4                                 
-                        CMP [.R3] , [.R4]                            ;   compare op1, op2
-                        BZ  $5                                       ;  true #1 (5 bc opcode1+op1.1+op1.2+opcode2+op2.1 
-                        MOVE #0 , #0[.IX]                            ;  equal ? false
-                        BR  $3                                       ;  skip next instr (3 bc opcode+op1+op2)
-                        MOVE #1 , #0[.IX]                            ;  equal ? true
-; termina ==
-; empieza ==
-                        ADD #129, .IY                                ;  .R3 = .IY + 129 = operand address
-                        MOVE .A, .R3                                 
-                        CMP [.R3] , #-100                            ;   compare op1, op2
-                        BZ  $5                                       ;  true #1 (5 bc opcode1+op1.1+op1.2+opcode2+op2.1 
-                        MOVE #0 , #1[.IX]                            ;  equal ? false
-                        BR  $3                                       ;  skip next instr (3 bc opcode+op1+op2)
-                        MOVE #1 , #1[.IX]                            ;  equal ? true
-; termina ==
-; empieza || 
-                        OR #0[.IX] , #1[.IX]                         ;   or op1, op2
-                        MOVE .A , #0[.IX]                            ;  move accumulator to result
-; termina ||
-; empieza ==
-                        ADD #129, .IY                                ;  .R3 = .IY + 129 = operand address
-                        MOVE .A, .R3                                 
-                        CMP [.R3] , #0                               ;   compare op1, op2
-                        BZ  $5                                       ;  true #1 (5 bc opcode1+op1.1+op1.2+opcode2+op2.1 
-                        MOVE #0 , #3[.IX]                            ;  equal ? false
-                        BR  $3                                       ;  skip next instr (3 bc opcode+op1+op2)
-                        MOVE #1 , #3[.IX]                            ;  equal ? true
-; termina ==
-; empieza || 
-                        OR #0[.IX] , #3[.IX]                         ;   or op1, op2
-                        MOVE .A , #0[.IX]                            ;  move accumulator to result
-; termina ||
-                        ADD #128, .IY                                ;  .R4 = .IY + 128 = operand address
-                        MOVE .A, .R4                                 
-                        MOVE #0[.IX] , [.R4]                         ;   assign op1 to res
-                        ADD #130, .IY                                ;  .R4 = .IY + 130 = operand address
-                        MOVE .A, .R4                                 
-                        MOVE #0 , [.R4]                              ;   assign op1 to res
                         BR $nombre_end                               ;  jump to the end of the function to avoid calling it 
 nombre:
                         NOP                                          ;  NOP to manage recursive functions
-;empieza asignacion de string
-                        MOVE #lit1, .R5                              ;  poner en .R5 la direccion de LECTURA
-                        ADD #64, .IY                                 
-                        MOVE .A, .R6                                 ;  poner en R6 la direccion de ESCRITURA
-                        MOVE #0, .R7                                 ;  r7 = contador para salir del bucle de asignacion de strings
-                                                                     ;  copiar los datos de op1 a res
-copy_1_loop:
-                        MOVE [.R5], [.R6]                            ;  #offset[/op1] -> #offset[/res]
-                        INC .R5                                      ;  aumentamos la posicion de la que leemos
-                        INC .R6                                      ;   aumentamos la posicion en la que escribimos
-                        INC .R7                                      ;  aumentamos el contador del bucle
-                        CMP #4 , .R7                                 
-                        BP /copy_1_loop                              ;  si R7 <63 repites el bucle
-;termina asignacion de string
-                        HALT                                         ; si en el programa principal haces un return, paras de ejecutar
+                        MOVE #lit0 , .R5                             ;   R5 = direccion de LECTURA = direccion del valor de retorno
+                        BR [.IX]                                     ;  devuelve el control al llamador
+;fin return
                         BR [.IX]                                     ;  devuelve el control al llamador
 nombre_end:
                         NOP                                          ;  para evitar 2 tags juntos
 ; empieza paso de parámetro 0
                         ADD #0, .IX                                  ;  movemos el puntero al siguiente RA
                         ADD #1, .A                                   ;  Nos colocamos en la parte de params del RA del llamado
-                        ADD #129, .IY                                ;  .R3 = .IY + 129 = operand address
-                        MOVE .A, .R3                                 
-                        MOVE [.R3] , [.A]                            ;   Pasamos el param a su posicion, la suma anterior incrementa por cada param
+                        MOVE #2 , [.A]                               ;   Pasamos el param a su posicion, la suma anterior incrementa por cada param
 ;fin de paso de parametro 0
-; empieza paso de parámetro 1
-                        ADD #0, .IX                                  ;  movemos el puntero al siguiente RA
-                        ADD #2, .A                                   ;  Nos colocamos en la parte de params del RA del llamado
-                        ADD #128, .IY                                ;  .R3 = .IY + 128 = operand address
-                        MOVE .A, .R3                                 
-                        MOVE [.R3] , [.A]                            ;   Pasamos el param a su posicion, la suma anterior incrementa por cada param
-;fin de paso de parametro 1
-; empieza paso de parámetro 2
-                        ADD #0, .IX                                  ;  movemos el puntero al siguiente RA
-                        ADD #3, .A                                   ;  Nos colocamos en la parte de params del RA del llamado
-                        MOVE .A, .R6                                 ;  R6 = direccion de ESCRITURA = direccion del param 2 de la funcion llamada
-                        ADD #0, .IY                                  
-                        MOVE .A, .R5                                 ;  R5 = direccion param 2 referencia = direccion de LECTURA
-                        MOVE #0, .R7                                 ;  r7 = contador para salir del bucle de asignacion de strings
-                                                                     ;  copiar los datos de op1 a res
-copy_2_loop:
-                        MOVE [.R5], [.R6]                            ;  #offset[/op1] -> #offset[/res]
-                        INC .R5                                      ;  aumentamos la posicion de la que leemos
-                        INC .R6                                      ;   aumentamos la posicion en la que escribimos
-                        INC .R7                                      ;  aumentamos el contador del bucle
-                        CMP #62 , .R7                                
-                        BP /copy_2_loop                              ;  si R7 <63 repites el bucle
-;fin de paso de parametro 2
 ;empieza llamda a nombre() 
                         ADD #0, .IX                                  ;  avanzo el puntero de pila al RA de la funcion llamada   
                         MOVE .A, .IX                                 ;  recoloco el puntero de pila al comienzo del resgistro de activacion al llamado
@@ -132,13 +31,13 @@ ret_dir_nombre_0:
                                                                      ;  llamado deja en .R5 la direccion del valor de retorno = direccion de LECTURA
                         MOVE #0, .R7                                 ;  r7 = contador para salir del bucle de asignacion de strings
                                                                      ;  copiar los datos de op1 a res
-copy_3_loop:
+copy_0_loop:
                         MOVE [.R5], [.R6]                            ;  #offset[/op1] -> #offset[/res]
                         INC .R5                                      ;  aumentamos la posicion de la que leemos
                         INC .R6                                      ;   aumentamos la posicion en la que escribimos
                         INC .R7                                      ;  aumentamos el contador del bucle
                         CMP #62 , .R7                                
-                        BP /copy_3_loop                              ;  si R7 <63 repites el bucle
+                        BP /copy_0_loop                              ;  si R7 <63 repites el bucle
 ;fin llamada a nombre() 
 ;empieza asignacion de string
                         ADD #0, .IX                                  
@@ -147,23 +46,21 @@ copy_3_loop:
                         MOVE .A, .R6                                 ;  poner en R6 la direccion de ESCRITURA
                         MOVE #0, .R7                                 ;  r7 = contador para salir del bucle de asignacion de strings
                                                                      ;  copiar los datos de op1 a res
-copy_4_loop:
+copy_1_loop:
                         MOVE [.R5], [.R6]                            ;  #offset[/op1] -> #offset[/res]
                         INC .R5                                      ;  aumentamos la posicion de la que leemos
                         INC .R6                                      ;   aumentamos la posicion en la que escribimos
                         INC .R7                                      ;  aumentamos el contador del bucle
                         CMP #62 , .R7                                
-                        BP /copy_4_loop                              ;  si R7 <63 repites el bucle
+                        BP /copy_1_loop                              ;  si R7 <63 repites el bucle
 ;termina asignacion de string
                         WRSTR #0[.IY]                                ;   print string
 
                         HALT
                         NOP
-                        lit0: DATA "mariano"                         
-
-                        lit1: DATA "hola"                            
+                        lit0: DATA "abcd"                            
 static_memory_start:
-                        RES 131                                      ;  reserve 131 memory addresses for global variables
+                        RES 128                                      ;  reserve 128 memory addresses for global variables
                         END                                          ; end of program
                 
 ;----------------------------------------------------------------------------------------

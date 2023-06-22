@@ -1,22 +1,10 @@
 let string cadena;
-let string cadena2;
-
-let boolean logico;
-let int entero;
-let int condicion;
-
-cadena = "mariano";
-
-entero = 0 + -100;
-logico = entero == entero || entero == -100 || entero == 0;
-condicion = 0;
-
-function nombre string( int entero, boolean logico, string cadena){
-    cadena2= "hola";
-    return cadena2;
+let string otro;
+function nombre string(int i){
+    
+    return "abcd";
 }
-cadena= nombre ( entero, logico,cadena);
+cadena= nombre(2);
+
 
 print(cadena);
-
-

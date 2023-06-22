@@ -6,7 +6,22 @@
                         BR $nombre_end                               ;  jump to the end of the function to avoid calling it 
 nombre:
                         NOP                                          ;  NOP to manage recursive functions
-                        MOVE #lit0 , .R5                             ;   R5 = direccion de ESCRITURA = direccion del valor de retorno
+;empieza asignacion de string
+                        MOVE #lit0, .R5                              ;  poner en .R5 la direccion de LECTURA
+                        ADD #64, .IY                                 
+                        MOVE .A, .R6                                 ;  poner en R6 la direccion de ESCRITURA
+                        MOVE #0, .R7                                 ;  r7 = contador para salir del bucle de asignacion de strings
+                                                                     ;  copiar los datos de op1 a res
+copy_0_loop:
+                        MOVE [.R5], [.R6]                            ;  #offset[/op1] -> #offset[/res]
+                        INC .R5                                      ;  aumentamos la posicion de la que leemos
+                        INC .R6                                      ;   aumentamos la posicion en la que escribimos
+                        INC .R7                                      ;  aumentamos el contador del bucle
+                        CMP #4 , .R7                                 
+                        BP /copy_0_loop                              ;  si R7 <63 repites el bucle
+;termina asignacion de string
+;conmienzo return
+                        MOVE #64[.IY] , .R5                          ;  None
                         BR [.IX]                                     ;  devuelve el control al llamador
 ;fin return
                         BR [.IX]                                     ;  devuelve el control al llamador
@@ -15,28 +30,8 @@ nombre_end:
 ; empieza paso de parámetro 0
                         ADD #0, .IX                                  ;  movemos el puntero al siguiente RA
                         ADD #1, .A                                   ;  Nos colocamos en la parte de params del RA del llamado
-                        MOVE #0 , [.A]                               ;   Pasamos el param a su posicion, la suma anterior incrementa por cada param
+                        MOVE #2 , [.A]                               ;   Pasamos el param a su posicion, la suma anterior incrementa por cada param
 ;fin de paso de parametro 0
-; empieza paso de parámetro 1
-                        ADD #0, .IX                                  ;  movemos el puntero al siguiente RA
-                        ADD #2, .A                                   ;  Nos colocamos en la parte de params del RA del llamado
-                        MOVE #1 , [.A]                               ;   Pasamos el param a su posicion, la suma anterior incrementa por cada param
-;fin de paso de parametro 1
-; empieza paso de parámetro 2
-                        ADD #0, .IX                                  ;  movemos el puntero al siguiente RA
-                        ADD #3, .A                                   ;  Nos colocamos en la parte de params del RA del llamado
-                        MOVE .A, .R6                                 ;  R6 = direccion de ESCRITURA = direccion del param 2 de la funcion llamada
-                        MOVE #lit1, .R5                              ;  R5 = direccion param 2 literal = direccion de LECTURA
-                        MOVE #0, .R7                                 ;  r7 = contador para salir del bucle de asignacion de strings
-                                                                     ;  copiar los datos de op1 a res
-copy_0_loop:
-                        MOVE [.R5], [.R6]                            ;  #offset[/op1] -> #offset[/res]
-                        INC .R5                                      ;  aumentamos la posicion de la que leemos
-                        INC .R6                                      ;   aumentamos la posicion en la que escribimos
-                        INC .R7                                      ;  aumentamos el contador del bucle
-                        CMP #6 , .R7                                 
-                        BP /copy_0_loop                              ;  si R7 <63 repites el bucle
-;fin de paso de parametro 2
 ;empieza llamda a nombre() 
                         ADD #0, .IX                                  ;  avanzo el puntero de pila al RA de la funcion llamada   
                         MOVE .A, .IX                                 ;  recoloco el puntero de pila al comienzo del resgistro de activacion al llamado
@@ -74,15 +69,14 @@ copy_2_loop:
                         CMP #62 , .R7                                
                         BP /copy_2_loop                              ;  si R7 <63 repites el bucle
 ;termina asignacion de string
+                        WRSTR #64[.IY]                               ;   print string
                         WRSTR #0[.IY]                                ;   print string
 
                         HALT
                         NOP
-                        lit0: DATA "mamawebo"                        
-
-                        lit1: DATA "cadena"                          
+                        lit0: DATA "abcd"                            
 static_memory_start:
-                        RES 64                                       ;  reserve 64 memory addresses for global variables
+                        RES 128                                      ;  reserve 128 memory addresses for global variables
                         END                                          ; end of program
                 
 ;----------------------------------------------------------------------------------------

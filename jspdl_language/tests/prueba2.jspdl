@@ -1,8 +1,10 @@
-
-function nombre string( int entero, boolean logico, string cadena){
-
-    return "mamawebo";
-}
 let string cadena;
-cadena = nombre( 0, true,"cadena");
+let string otro;
+function nombre string(int i){
+    otro = "abcd";
+    return otro;
+}
+cadena= nombre(2);
+
+print(otro);
 print(cadena);
